@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using System.Web;
@@ -18,11 +19,7 @@ public sealed class OAuthFlow
     {
         var state = Guid.NewGuid().ToString("N");
 
-        var authUrl = $"{AuthorizeUrl}?client_id={Uri.EscapeDataString(config.ClientId)}"
-            + $"&redirect_uri={Uri.EscapeDataString(RedirectUri)}"
-            + $"&scope={Uri.EscapeDataString(Scopes)}"
-            + $"&state={state}"
-            + "&response_type=code";
+        var authUrl = $"{AuthorizeUrl}?client_id={Uri.EscapeDataString(config.ClientId)}" + $"&redirect_uri={Uri.EscapeDataString(RedirectUri)}" + $"&scope={Uri.EscapeDataString(Scopes)}" + $"&state={state}" + "&response_type=code";
 
         AnsiConsole.MarkupLine("[bold]Open this URL in your browser to authorize:[/]");
         AnsiConsole.MarkupLine($"[link={authUrl}]{authUrl}[/]");
@@ -31,10 +28,10 @@ public sealed class OAuthFlow
         // Try to open the browser automatically
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            Process.Start(new ProcessStartInfo
             {
                 FileName = authUrl,
-                UseShellExecute = true
+                UseShellExecute = true,
             });
         }
         catch
@@ -66,7 +63,7 @@ public sealed class OAuthFlow
 
         if (!string.IsNullOrEmpty(error))
         {
-            byte[] errorHtml = "<html><body><h1>Authorization Failed</h1><p>You can close this window.</p></body></html>"u8.ToArray();
+            var errorHtml = "<html><body><h1>Authorization Failed</h1><p>You can close this window.</p></body></html>"u8.ToArray();
             response.StatusCode = 400;
             await response.OutputStream.WriteAsync(errorHtml);
             response.Close();
@@ -75,14 +72,14 @@ public sealed class OAuthFlow
 
         if (state != expectedState)
         {
-            byte[] stateHtml = "<html><body><h1>State Mismatch</h1><p>Security check failed.</p></body></html>"u8.ToArray();
+            var stateHtml = "<html><body><h1>State Mismatch</h1><p>Security check failed.</p></body></html>"u8.ToArray();
             response.StatusCode = 400;
             await response.OutputStream.WriteAsync(stateHtml);
             response.Close();
             throw new NetatmoException("OAuth state mismatch — possible CSRF attack.");
         }
 
-        byte[] successHtml = "<html><body><h1>Authorization Successful</h1><p>You can close this window and return to the terminal.</p></body></html>"u8.ToArray();
+        var successHtml = "<html><body><h1>Authorization Successful</h1><p>You can close this window and return to the terminal.</p></body></html>"u8.ToArray();
         response.StatusCode = 200;
         await response.OutputStream.WriteAsync(successHtml);
         response.Close();
@@ -108,15 +105,16 @@ public sealed class OAuthFlow
         var json = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
+        {
             throw new NetatmoException($"Token exchange failed ({response.StatusCode}): {json}");
+        }
 
-        var tokens = JsonSerializer.Deserialize(json, AppJsonContext.Default.TokenData)
-            ?? throw new NetatmoException("Failed to parse token response.");
+        var tokens = JsonSerializer.Deserialize(json, AppJsonContext.Default.TokenData) ?? throw new NetatmoException("Failed to parse token response.");
 
         // Compute absolute expiry time
         tokens = tokens with
         {
-            ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + tokens.ExpiresIn
+            ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + tokens.ExpiresIn,
         };
 
         return tokens;
@@ -137,14 +135,15 @@ public sealed class OAuthFlow
         var json = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
+        {
             throw new NetatmoException($"Token refresh failed ({response.StatusCode}): {json}");
+        }
 
-        var newTokens = JsonSerializer.Deserialize(json, AppJsonContext.Default.TokenData)
-            ?? throw new NetatmoException("Failed to parse refresh token response.");
+        var newTokens = JsonSerializer.Deserialize(json, AppJsonContext.Default.TokenData) ?? throw new NetatmoException("Failed to parse refresh token response.");
 
         newTokens = newTokens with
         {
-            ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + newTokens.ExpiresIn
+            ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + newTokens.ExpiresIn,
         };
 
         return newTokens;

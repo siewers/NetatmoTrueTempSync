@@ -30,13 +30,20 @@ public sealed class StatusCommand : AsyncCommand
             foreach (var station in stationsData.Body?.Devices ?? [])
             {
                 if (station.Type == "NAMain" && station.DashboardData?.Temperature is not null)
+                {
                     indoorReadings.Add((station.ModuleName, station.DashboardData.Temperature.Value));
+                }
 
                 foreach (var module in station.Modules.Where(m => m.Type == "NAModule4" && m.Reachable && m.DashboardData?.Temperature is not null))
+                {
                     indoorReadings.Add((module.ModuleName, module.DashboardData!.Temperature!.Value));
+                }
             }
         }
-        catch { /* read_station scope may not be granted yet */ }
+        catch
+        {
+            /* read_station scope may not be granted yet */
+        }
 
         foreach (var home in homes)
         {
@@ -48,24 +55,27 @@ public sealed class StatusCommand : AsyncCommand
             var moduleStatuses = status.Body?.Home?.Modules ?? [];
 
             var table = new Table()
-                .Border(TableBorder.Rounded)
-                .AddColumn("Room")
-                .AddColumn("Valve")
-                .AddColumn("Sensor")
-                .AddColumn("Delta")
-                .AddColumn("Setpoint")
-                .AddColumn("Mode")
-                .AddColumn("Heating")
-                .AddColumn("Devices");
+                       .Border(TableBorder.Rounded)
+                       .AddColumn("Room")
+                       .AddColumn("Valve")
+                       .AddColumn("Sensor")
+                       .AddColumn("Delta")
+                       .AddColumn("Setpoint")
+                       .AddColumn("Mode")
+                       .AddColumn("Heating")
+                       .AddColumn("Devices");
 
             foreach (var room in home.Rooms)
             {
                 var rs = roomStatuses.FirstOrDefault(r => r.Id == room.Id);
-                if (rs is null) continue;
+                if (rs is null)
+                {
+                    continue;
+                }
 
                 var roomModules = home.Modules
-                    .Where(m => room.ModuleIds.Contains(m.Id))
-                    .ToList();
+                                      .Where(m => room.ModuleIds.Contains(m.Id))
+                                      .ToList();
 
                 var moduleInfo = roomModules.Select(m =>
                 {
@@ -75,8 +85,9 @@ public sealed class StatusCommand : AsyncCommand
                         "NATherm1" => "[blue]Thermostat[/]",
                         "NRV" => "[green]Valve[/]",
                         "NAPlug" => "[dim]Relay[/]",
-                        _ => m.Type
+                        _ => m.Type,
                     };
+
                     var battery = ms?.BatteryState switch
                     {
                         "full" => "[green]████[/]",
@@ -84,8 +95,9 @@ public sealed class StatusCommand : AsyncCommand
                         "medium" => "[yellow]██░░[/]",
                         "low" => "[red]█░░░[/]",
                         "very low" => "[red]░░░░[/]",
-                        _ => "[dim]n/a[/]"
+                        _ => "[dim]n/a[/]",
                     };
+
                     var reachable = ms?.Reachable == true ? "" : " [red](offline)[/]";
                     return $"{typeLabel} {Markup.Escape(m.Name)}{reachable} {battery}";
                 });
@@ -108,9 +120,9 @@ public sealed class StatusCommand : AsyncCommand
                 }
 
                 var measuredColor = rs.MeasuredTemperature.HasValue && rs.SetpointTemperature.HasValue
-                    ? (rs.MeasuredTemperature < rs.SetpointTemperature - 0.5 ? "red"
-                        : rs.MeasuredTemperature > rs.SetpointTemperature + 0.5 ? "yellow"
-                        : "green")
+                    ? rs.MeasuredTemperature < rs.SetpointTemperature - 0.5 ? "red"
+                    : rs.MeasuredTemperature > rs.SetpointTemperature + 0.5 ? "yellow"
+                    : "green"
                     : "white";
 
                 var heatingLabel = rs.HeatingPowerRequest switch
@@ -118,7 +130,7 @@ public sealed class StatusCommand : AsyncCommand
                     null => "[dim]n/a[/]",
                     0 => "[dim]off[/]",
                     100 => "[red bold]100%[/]",
-                    var p => $"[yellow]{p}%[/]"
+                    var p => $"[yellow]{p}%[/]",
                 };
 
                 table.AddRow(
@@ -146,10 +158,8 @@ public sealed class StatusCommand : AsyncCommand
 
     internal static (AppConfig config, TokenData tokens) LoadConfigOrFail()
     {
-        var config = TokenStore.LoadConfig()
-            ?? throw new NetatmoException("Not configured. Run 'auth' first.");
-        var tokens = TokenStore.LoadTokens()
-            ?? throw new NetatmoException("Not authenticated. Run 'auth' first.");
+        var config = TokenStore.LoadConfig() ?? throw new NetatmoException("Not configured. Run 'auth' first.");
+        var tokens = TokenStore.LoadTokens() ?? throw new NetatmoException("Not authenticated. Run 'auth' first.");
         return (config, tokens);
     }
 }

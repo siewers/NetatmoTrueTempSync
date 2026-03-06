@@ -18,24 +18,24 @@ public sealed class AuthCommand : AsyncCommand
         AnsiConsole.MarkupLine("[bold]OAuth2 API credentials[/] [dim](from dev.netatmo.com)[/]");
         var clientId = AnsiConsole.Prompt(
             new TextPrompt<string>("Client ID:")
-                .DefaultValue(existingConfig?.ClientId ?? ""));
+               .DefaultValue(existingConfig?.ClientId ?? ""));
 
         var clientSecret = AnsiConsole.Prompt(
             new TextPrompt<string>("Client Secret:")
-                .Secret()
-                .DefaultValue(existingConfig?.ClientSecret ?? ""));
+               .Secret()
+               .DefaultValue(existingConfig?.ClientSecret ?? ""));
 
         // Netatmo account credentials (for truetemperature)
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Netatmo account credentials[/] [dim](for true temperature calibration)[/]");
         var email = AnsiConsole.Prompt(
             new TextPrompt<string>("Email:")
-                .DefaultValue(existingConfig?.NetatmoEmail ?? ""));
+               .DefaultValue(existingConfig?.NetatmoEmail ?? ""));
 
         var password = AnsiConsole.Prompt(
             new TextPrompt<string>("Password:")
-                .Secret()
-                .DefaultValue(existingConfig?.NetatmoPassword ?? ""));
+               .Secret()
+               .DefaultValue(existingConfig?.NetatmoPassword ?? ""));
 
         var config = new AppConfig
         {

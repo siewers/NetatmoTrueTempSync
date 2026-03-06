@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using NetatmoThermoSync.Api;
 using NetatmoThermoSync.Auth;
 using NetatmoThermoSync.Models;
@@ -37,7 +38,9 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
         await webAuth.LoginAsync(config.NetatmoEmail, config.NetatmoPassword);
 
         if (settings.DryRun)
+        {
             AnsiConsole.MarkupLine("[yellow]Dry run mode — no changes will be made.[/]");
+        }
 
         try
         {
@@ -59,11 +62,10 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
 
         var home = !string.IsNullOrEmpty(settings.HomeName)
             ? homes.FirstOrDefault(h =>
-                h.Name.Equals(settings.HomeName, StringComparison.OrdinalIgnoreCase) ||
-                h.Id == settings.HomeName)
-              ?? throw new NetatmoException($"Home '{settings.HomeName}' not found.")
-            : homes.FirstOrDefault()
-              ?? throw new NetatmoException("No homes found.");
+                  h.Name.Equals(settings.HomeName, StringComparison.OrdinalIgnoreCase) ||
+                  h.Id == settings.HomeName) ??
+              throw new NetatmoException($"Home '{settings.HomeName}' not found.")
+            : homes.FirstOrDefault() ?? throw new NetatmoException("No homes found.");
 
         var status = await client.GetHomeStatusAsync(home.Id);
         var roomStatuses = status.Body?.Home?.Rooms ?? [];
@@ -72,7 +74,7 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
         // Get weather station indoor module readings
         var indoorReadings = await GetIndoorReadingsAsync(client);
 
-        var timestamp = DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+        var timestamp = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"[{timestamp}]")}[/] Syncing [bold]{Markup.Escape(home.Name)}[/]...");
 
         if (indoorReadings.Count == 0)
@@ -89,10 +91,13 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
         {
             var moduleIds = room.ModuleIds ?? [];
             var valves = home.Modules
-                .Where(m => moduleIds.Contains(m.Id) && m.Type == "NRV")
-                .ToList();
+                             .Where(m => moduleIds.Contains(m.Id) && m.Type == "NRV")
+                             .ToList();
 
-            if (valves.Count == 0) continue;
+            if (valves.Count == 0)
+            {
+                continue;
+            }
 
             // Check sensor_map config first, then fall back to name matching
             IndoorReading? sensor = null;
@@ -102,14 +107,21 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
                 sensor = indoorReadings.FirstOrDefault(r =>
                     r.Name.Equals(mappedSensor, StringComparison.OrdinalIgnoreCase));
             }
+
             sensor ??= indoorReadings.FirstOrDefault(r =>
                 room.Name.Contains(r.Name, StringComparison.OrdinalIgnoreCase) ||
                 r.Name.Contains(room.Name, StringComparison.OrdinalIgnoreCase));
 
-            if (sensor is null) continue;
+            if (sensor is null)
+            {
+                continue;
+            }
 
             var rs = roomStatuses.FirstOrDefault(r => r.Id == room.Id);
-            if (rs?.MeasuredTemperature is null) continue;
+            if (rs?.MeasuredTemperature is null)
+            {
+                continue;
+            }
 
             var valveTemp = rs.MeasuredTemperature.Value;
             var delta = sensor.Temperature - valveTemp;
@@ -119,6 +131,7 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
             {
                 AnsiConsole.MarkupLine(
                     $"  [bold]{Markup.Escape(room.Name)}[/] — sensor [blue]{Markup.Escape(sensor.Name)}[/] [cyan]{sensor.Temperature:F1}°C[/], valve [yellow]{valveTemp:F1}°C[/] [dim](no correction needed)[/]");
+
                 continue;
             }
 
@@ -134,7 +147,9 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
         }
 
         if (syncCount == 0)
+        {
             AnsiConsole.MarkupLine("[yellow]  No room/sensor matches found. Indoor module names must match room names.[/]");
+        }
 
         AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"[{timestamp}]")}[/] Sync complete — {syncCount} room(s) updated.");
     }

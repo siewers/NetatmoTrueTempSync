@@ -36,15 +36,14 @@ public sealed class SetTempCommand : AsyncCommand<SetTempSettings>
 
         var home = !string.IsNullOrEmpty(settings.HomeName)
             ? homes.FirstOrDefault(h =>
-                h.Name.Equals(settings.HomeName, StringComparison.OrdinalIgnoreCase) ||
-                h.Id == settings.HomeName)
-              ?? throw new NetatmoException($"Home '{settings.HomeName}' not found.")
-            : homes.FirstOrDefault()
-              ?? throw new NetatmoException("No homes found.");
+                  h.Name.Equals(settings.HomeName, StringComparison.OrdinalIgnoreCase) ||
+                  h.Id == settings.HomeName) ??
+              throw new NetatmoException($"Home '{settings.HomeName}' not found.")
+            : homes.FirstOrDefault() ?? throw new NetatmoException("No homes found.");
 
         var room = home.Rooms.FirstOrDefault(r =>
-            r.Name.Contains(settings.RoomName, StringComparison.OrdinalIgnoreCase))
-            ?? throw new NetatmoException($"Room matching '{settings.RoomName}' not found.");
+                       r.Name.Contains(settings.RoomName, StringComparison.OrdinalIgnoreCase)) ??
+                   throw new NetatmoException($"Room matching '{settings.RoomName}' not found.");
 
         int? endTime = settings.DurationMinutes.HasValue
             ? (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + settings.DurationMinutes.Value * 60)

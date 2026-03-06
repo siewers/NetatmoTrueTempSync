@@ -10,6 +10,7 @@ public sealed class TokenStore
         ".config", "netatmo-thermosync");
 
     private static string TokenPath => Path.Combine(ConfigDir, "tokens.json");
+
     private static string ConfigPath => Path.Combine(ConfigDir, "config.json");
 
     public static void EnsureConfigDir()
@@ -19,7 +20,11 @@ public sealed class TokenStore
 
     public static TokenData? LoadTokens()
     {
-        if (!File.Exists(TokenPath)) return null;
+        if (!File.Exists(TokenPath))
+        {
+            return null;
+        }
+
         var json = File.ReadAllText(TokenPath);
         return JsonSerializer.Deserialize(json, AppJsonContext.Default.TokenData);
     }
@@ -37,7 +42,11 @@ public sealed class TokenStore
 
     public static AppConfig? LoadConfig()
     {
-        if (!File.Exists(ConfigPath)) return null;
+        if (!File.Exists(ConfigPath))
+        {
+            return null;
+        }
+
         var json = File.ReadAllText(ConfigPath);
         return JsonSerializer.Deserialize(json, AppJsonContext.Default.AppConfig);
     }

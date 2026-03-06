@@ -1,13 +1,13 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using NetatmoThermoSync.Models;
-using Spectre.Console;
 
 namespace NetatmoThermoSync.Auth;
 
 /// <summary>
-/// Authenticates via Netatmo's web login flow (cookie-based session).
-/// Required for the /api/truetemperature endpoint which doesn't accept third-party OAuth tokens.
+///     Authenticates via Netatmo's web login flow (cookie-based session).
+///     Required for the /api/truetemperature endpoint which doesn't accept third-party OAuth tokens.
 /// </summary>
 public sealed class WebSessionAuth : IDisposable
 {
@@ -16,9 +16,6 @@ public sealed class WebSessionAuth : IDisposable
 
     private readonly CookieContainer _cookies = new();
     private readonly HttpClient _http;
-    private string? _accessToken;
-
-    public string? AccessToken => _accessToken;
 
     public WebSessionAuth()
     {
@@ -28,12 +25,18 @@ public sealed class WebSessionAuth : IDisposable
         _http.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
+    public string? AccessToken { get; private set; }
+
+    public void Dispose() => _http.Dispose();
+
     public async Task<bool> LoginAsync(string email, string password)
     {
         // Step 1: Get initial session cookie
         var loginPage = await _http.GetAsync($"{AuthBase}/en-us/access/login");
         if (!loginPage.IsSuccessStatusCode)
+        {
             throw new NetatmoException($"Failed to load login page: {loginPage.StatusCode}");
+        }
 
         // Step 2: Set required cookie
         _cookies.Add(new Uri("https://netatmo.com"), new Cookie("netatmocomlast_app_used", "app_thermostat", "/", ".netatmo.com"));
@@ -41,12 +44,13 @@ public sealed class WebSessionAuth : IDisposable
         // Step 3: Get CSRF token
         var csrfResponse = await _http.GetAsync($"{AuthBase}/access/csrf");
         if (!csrfResponse.IsSuccessStatusCode)
+        {
             throw new NetatmoException($"Failed to get CSRF token: {csrfResponse.StatusCode}");
+        }
 
         var csrfJson = await csrfResponse.Content.ReadAsStringAsync();
         var csrfDoc = JsonDocument.Parse(csrfJson);
-        var csrfToken = csrfDoc.RootElement.GetProperty("token").GetString()
-            ?? throw new NetatmoException("CSRF token not found in response");
+        var csrfToken = csrfDoc.RootElement.GetProperty("token").GetString() ?? throw new NetatmoException("CSRF token not found in response");
 
         // Step 4: Submit login credentials
         var loginPayload = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -81,38 +85,42 @@ public sealed class WebSessionAuth : IDisposable
         }
 
         if (tokenCookie is null)
+        {
             throw new NetatmoException("Login succeeded but access token cookie not found. Check your credentials.");
+        }
 
-        _accessToken = tokenCookie.Value.Replace("%7C", "|");
+        AccessToken = tokenCookie.Value.Replace("%7C", "|");
         return true;
     }
 
     public async Task SetTrueTemperatureAsync(string homeId, string roomId, double currentTemp, double correctedTemp)
     {
-        if (_accessToken is null)
+        if (AccessToken is null)
+        {
             throw new NetatmoException("Not authenticated. Call LoginAsync first.");
+        }
 
         var payload = new TrueTemperatureRequest
         {
             HomeId = homeId,
             RoomId = roomId,
             CurrentTemperature = currentTemp,
-            CorrectedTemperature = correctedTemp
+            CorrectedTemperature = correctedTemp,
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.netatmo.com/api/truetemperature");
-        request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+        request.Headers.Add("Authorization", $"Bearer {AccessToken}");
         request.Content = new StringContent(
             JsonSerializer.Serialize(payload, AppJsonContext.Default.TrueTemperatureRequest),
-            System.Text.Encoding.UTF8,
+            Encoding.UTF8,
             "application/json");
 
         var response = await _http.SendAsync(request);
         var responseJson = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
+        {
             throw new NetatmoException($"truetemperature failed ({response.StatusCode}): {responseJson}");
+        }
     }
-
-    public void Dispose() => _http.Dispose();
 }
