@@ -114,9 +114,5 @@ public sealed class WebSessionAuth : IDisposable
             throw new NetatmoException($"truetemperature failed ({response.StatusCode}): {responseJson}");
     }
 
-    public void Dispose()
-    {
-        _http.Dispose();
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() => _http.Dispose();
 }

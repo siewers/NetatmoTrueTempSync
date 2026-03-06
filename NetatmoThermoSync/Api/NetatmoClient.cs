@@ -89,9 +89,5 @@ public sealed class NetatmoClient : IDisposable
             throw new NetatmoException($"setroomthermpoint failed ({response.StatusCode}): {json}");
     }
 
-    public void Dispose()
-    {
-        _http.Dispose();
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() => _http.Dispose();
 }
