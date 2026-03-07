@@ -1,18 +1,25 @@
+using System.CommandLine;
 using System.Globalization;
 using NetatmoThermoSync.Api;
 using Spectre.Console;
-using Spectre.Console.Cli;
 
 namespace NetatmoThermoSync.Commands;
 
-public sealed class DumpCommand : AsyncCommand
+public static class DumpCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public static Command Create()
+    {
+        var command = new Command("dump", "Dump raw API data for debugging device/room associations.");
+        command.SetAction(async (_, cancellationToken) => await ExecuteAsync(cancellationToken));
+        return command;
+    }
+
+    private static async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         var (config, tokens) = StatusCommand.LoadConfigOrFail();
         using var client = new NetatmoClient(config, tokens);
 
-        var homesData = await client.GetHomesDataAsync();
+        var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
 
         foreach (var home in homes)
@@ -33,7 +40,7 @@ public sealed class DumpCommand : AsyncCommand
             foreach (var r in home.Rooms)
             {
                 var moduleNames = home.Modules
-                                      .Where(m => r.ModuleIds.Contains(m.Id))
+                                      .Where(m => r.ModuleIds?.Contains(m.Id) == true)
                                       .Select(m => $"{m.Type}:{Markup.Escape(m.Name)}");
 
                 AnsiConsole.WriteLine($"  {Markup.Escape(r.Name),-20} id={r.Id} modules=[{string.Join(", ", moduleNames)}]");
@@ -41,7 +48,7 @@ public sealed class DumpCommand : AsyncCommand
 
             AnsiConsole.WriteLine();
 
-            var status = await client.GetHomeStatusAsync(home.Id);
+            var status = await client.GetHomeStatusAsync(home.Id, cancellationToken);
             AnsiConsole.MarkupLine("[bold]Modules from /homestatus:[/]");
             foreach (var ms in status.Body?.Home?.Modules ?? [])
             {
@@ -62,7 +69,7 @@ public sealed class DumpCommand : AsyncCommand
         // Weather station data
         try
         {
-            var stationsData = await client.GetStationsDataAsync();
+            var stationsData = await client.GetStationsDataAsync(cancellationToken);
             var devices = stationsData.Body?.Devices ?? [];
 
             if (devices.Count > 0)

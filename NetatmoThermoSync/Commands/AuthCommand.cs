@@ -1,13 +1,20 @@
+using System.CommandLine;
 using NetatmoThermoSync.Auth;
 using NetatmoThermoSync.Models;
 using Spectre.Console;
-using Spectre.Console.Cli;
 
 namespace NetatmoThermoSync.Commands;
 
-public sealed class AuthCommand : AsyncCommand
+public static class AuthCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public static Command Create()
+    {
+        var command = new Command("auth", "Authenticate with Netatmo (OAuth2 setup).");
+        command.SetAction(async (_, cancellationToken) => await ExecuteAsync(cancellationToken));
+        return command;
+    }
+
+    private static async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         AnsiConsole.MarkupLine("[bold yellow]Netatmo Setup[/]");
         AnsiConsole.WriteLine();
@@ -52,7 +59,7 @@ public sealed class AuthCommand : AsyncCommand
         try
         {
             var webAuth = new WebSessionAuth();
-            await webAuth.LoginAsync(email, password);
+            await webAuth.LoginAsync(email, password, cancellationToken);
             AnsiConsole.MarkupLine("[bold green]Web session login successful![/]");
         }
         catch (Exception ex)
@@ -64,7 +71,7 @@ public sealed class AuthCommand : AsyncCommand
         // OAuth2 flow
         try
         {
-            var tokens = await OAuthFlow.AuthorizeAsync(config);
+            var tokens = await OAuthFlow.AuthorizeAsync(config, cancellationToken);
             TokenStore.SaveTokens(tokens);
             AnsiConsole.MarkupLine("[bold green]OAuth2 authorization successful! Tokens saved.[/]");
             return 0;

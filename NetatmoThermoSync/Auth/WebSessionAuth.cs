@@ -25,14 +25,14 @@ public sealed class WebSessionAuth : IDisposable
         _http.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
-    public string? AccessToken { get; private set; }
+    private string? AccessToken { get; set; }
 
     public void Dispose() => _http.Dispose();
 
-    public async Task<bool> LoginAsync(string email, string password)
+    public async Task LoginAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         // Step 1: Get initial session cookie
-        var loginPage = await _http.GetAsync($"{AuthBase}/en-us/access/login");
+        var loginPage = await _http.GetAsync($"{AuthBase}/en-us/access/login", cancellationToken);
         if (!loginPage.IsSuccessStatusCode)
         {
             throw new NetatmoException($"Failed to load login page: {loginPage.StatusCode}");
@@ -42,13 +42,13 @@ public sealed class WebSessionAuth : IDisposable
         _cookies.Add(new Uri("https://netatmo.com"), new Cookie("netatmocomlast_app_used", "app_thermostat", "/", ".netatmo.com"));
 
         // Step 3: Get CSRF token
-        var csrfResponse = await _http.GetAsync($"{AuthBase}/access/csrf");
+        var csrfResponse = await _http.GetAsync($"{AuthBase}/access/csrf", cancellationToken);
         if (!csrfResponse.IsSuccessStatusCode)
         {
             throw new NetatmoException($"Failed to get CSRF token: {csrfResponse.StatusCode}");
         }
 
-        var csrfJson = await csrfResponse.Content.ReadAsStringAsync();
+        var csrfJson = await csrfResponse.Content.ReadAsStringAsync(cancellationToken);
         var csrfDoc = JsonDocument.Parse(csrfJson);
         var csrfToken = csrfDoc.RootElement.GetProperty("token").GetString() ?? throw new NetatmoException("CSRF token not found in response");
 
@@ -61,10 +61,10 @@ public sealed class WebSessionAuth : IDisposable
             ["_token"] = csrfToken,
         });
 
-        await _http.PostAsync($"{AuthBase}/access/postlogin", loginPayload);
+        await _http.PostAsync($"{AuthBase}/access/postlogin", loginPayload, cancellationToken);
 
         // Step 5: Complete authentication flow
-        await _http.GetAsync($"{AuthBase}/access/keychain?next_url=https://my.netatmo.com");
+        await _http.GetAsync($"{AuthBase}/access/keychain?next_url=https://my.netatmo.com", cancellationToken);
 
         // Step 6: Extract access token from cookies
         var allCookies = _cookies.GetCookies(new Uri("https://netatmo.com"));
@@ -90,10 +90,9 @@ public sealed class WebSessionAuth : IDisposable
         }
 
         AccessToken = tokenCookie.Value.Replace("%7C", "|");
-        return true;
     }
 
-    public async Task SetTrueTemperatureAsync(string homeId, string roomId, double currentTemp, double correctedTemp)
+    public async Task SetTrueTemperatureAsync(string homeId, string roomId, double currentTemp, double correctedTemp, CancellationToken cancellationToken = default)
     {
         if (AccessToken is null)
         {
@@ -115,8 +114,8 @@ public sealed class WebSessionAuth : IDisposable
             Encoding.UTF8,
             "application/json");
 
-        var response = await _http.SendAsync(request);
-        var responseJson = await response.Content.ReadAsStringAsync();
+        var response = await _http.SendAsync(request, cancellationToken);
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {

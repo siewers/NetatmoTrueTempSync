@@ -1,19 +1,26 @@
+using System.CommandLine;
 using NetatmoThermoSync.Api;
 using NetatmoThermoSync.Auth;
 using NetatmoThermoSync.Models;
 using Spectre.Console;
-using Spectre.Console.Cli;
 
 namespace NetatmoThermoSync.Commands;
 
-public sealed class StatusCommand : AsyncCommand
+public static class StatusCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public static Command Create()
+    {
+        var command = new Command("status", "Show current temperatures and device status for all rooms.");
+        command.SetAction(async (_, cancellationToken) => await ExecuteAsync(cancellationToken));
+        return command;
+    }
+
+    private static async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         var (config, tokens) = LoadConfigOrFail();
         using var client = new NetatmoClient(config, tokens);
 
-        var homesData = await client.GetHomesDataAsync();
+        var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
 
         if (homes.Count == 0)
@@ -26,15 +33,15 @@ public sealed class StatusCommand : AsyncCommand
         var indoorReadings = new List<(string Name, double Temp)>();
         try
         {
-            var stationsData = await client.GetStationsDataAsync();
+            var stationsData = await client.GetStationsDataAsync(cancellationToken);
             foreach (var station in stationsData.Body?.Devices ?? [])
             {
-                if (station.Type == "NAMain" && station.DashboardData?.Temperature is not null)
+                if (station is { Type: "NAMain", DashboardData.Temperature: not null })
                 {
                     indoorReadings.Add((station.ModuleName, station.DashboardData.Temperature.Value));
                 }
 
-                foreach (var module in station.Modules.Where(m => m.Type == "NAModule4" && m.Reachable && m.DashboardData?.Temperature is not null))
+                foreach (var module in station.Modules.Where(m => m is { Type: "NAModule4", Reachable: true, DashboardData.Temperature: not null }))
                 {
                     indoorReadings.Add((module.ModuleName, module.DashboardData!.Temperature!.Value));
                 }
@@ -50,7 +57,7 @@ public sealed class StatusCommand : AsyncCommand
             AnsiConsole.MarkupLine($"[bold underline]{Markup.Escape(home.Name)}[/] [dim]({home.Id})[/]");
             AnsiConsole.WriteLine();
 
-            var status = await client.GetHomeStatusAsync(home.Id);
+            var status = await client.GetHomeStatusAsync(home.Id, cancellationToken);
             var roomStatuses = status.Body?.Home?.Rooms ?? [];
             var moduleStatuses = status.Body?.Home?.Modules ?? [];
 
@@ -74,7 +81,7 @@ public sealed class StatusCommand : AsyncCommand
                 }
 
                 var roomModules = home.Modules
-                                      .Where(m => room.ModuleIds.Contains(m.Id))
+                                      .Where(m => room.ModuleIds?.Contains(m.Id) == true)
                                       .ToList();
 
                 var moduleInfo = roomModules.Select(m =>
@@ -119,7 +126,7 @@ public sealed class StatusCommand : AsyncCommand
                     deltaLabel = $"[{deltaColor}]{delta:+0.0;-0.0}°C[/]";
                 }
 
-                var measuredColor = rs.MeasuredTemperature.HasValue && rs.SetpointTemperature.HasValue
+                var measuredColor = rs is { MeasuredTemperature: not null, SetpointTemperature: not null }
                     ? rs.MeasuredTemperature < rs.SetpointTemperature - 0.5 ? "red"
                     : rs.MeasuredTemperature > rs.SetpointTemperature + 0.5 ? "yellow"
                     : "green"

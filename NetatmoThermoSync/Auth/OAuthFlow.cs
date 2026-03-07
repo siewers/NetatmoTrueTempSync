@@ -7,15 +7,16 @@ using Spectre.Console;
 
 namespace NetatmoThermoSync.Auth;
 
-public sealed class OAuthFlow
+public static class OAuthFlow
 {
     private const string AuthorizeUrl = "https://api.netatmo.com/oauth2/authorize";
     private const string TokenUrl = "https://api.netatmo.com/oauth2/token";
     private const string Scopes = "read_thermostat write_thermostat read_station";
     private const int CallbackPort = 11842;
     private static readonly string RedirectUri = $"http://localhost:{CallbackPort}/callback";
+    private static readonly HttpClient Http = new();
 
-    public static async Task<TokenData> AuthorizeAsync(AppConfig config)
+    public static async Task<TokenData> AuthorizeAsync(AppConfig config, CancellationToken cancellationToken = default)
     {
         var state = Guid.NewGuid().ToString("N");
 
@@ -39,11 +40,11 @@ public sealed class OAuthFlow
             // Ignore — user can open manually
         }
 
-        var code = await WaitForCallbackAsync(state);
-        return await ExchangeCodeAsync(config, code);
+        var code = await WaitForCallbackAsync(state, cancellationToken);
+        return await ExchangeCodeAsync(config, code, cancellationToken);
     }
 
-    private static async Task<string> WaitForCallbackAsync(string expectedState)
+    private static async Task<string> WaitForCallbackAsync(string expectedState, CancellationToken cancellationToken)
     {
         using var listener = new HttpListener();
         listener.Prefixes.Add($"http://localhost:{CallbackPort}/");
@@ -51,7 +52,7 @@ public sealed class OAuthFlow
 
         AnsiConsole.MarkupLine("[dim]Waiting for authorization callback...[/]");
 
-        var context = await listener.GetContextAsync();
+        var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
         var query = context.Request.Url?.Query ?? "";
         var parameters = HttpUtility.ParseQueryString(query);
 
@@ -65,7 +66,7 @@ public sealed class OAuthFlow
         {
             var errorHtml = "<html><body><h1>Authorization Failed</h1><p>You can close this window.</p></body></html>"u8.ToArray();
             response.StatusCode = 400;
-            await response.OutputStream.WriteAsync(errorHtml);
+            await response.OutputStream.WriteAsync(errorHtml, cancellationToken);
             response.Close();
             throw new NetatmoException($"Authorization failed: {error}");
         }
@@ -74,23 +75,22 @@ public sealed class OAuthFlow
         {
             var stateHtml = "<html><body><h1>State Mismatch</h1><p>Security check failed.</p></body></html>"u8.ToArray();
             response.StatusCode = 400;
-            await response.OutputStream.WriteAsync(stateHtml);
+            await response.OutputStream.WriteAsync(stateHtml, cancellationToken);
             response.Close();
             throw new NetatmoException("OAuth state mismatch — possible CSRF attack.");
         }
 
         var successHtml = "<html><body><h1>Authorization Successful</h1><p>You can close this window and return to the terminal.</p></body></html>"u8.ToArray();
         response.StatusCode = 200;
-        await response.OutputStream.WriteAsync(successHtml);
+        await response.OutputStream.WriteAsync(successHtml, cancellationToken);
         response.Close();
         listener.Stop();
 
         return code ?? throw new NetatmoException("No authorization code received.");
     }
 
-    private static async Task<TokenData> ExchangeCodeAsync(AppConfig config, string code)
+    private static async Task<TokenData> ExchangeCodeAsync(AppConfig config, string code, CancellationToken cancellationToken)
     {
-        using var http = new HttpClient();
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
@@ -101,8 +101,8 @@ public sealed class OAuthFlow
             ["scope"] = Scopes,
         });
 
-        var response = await http.PostAsync(TokenUrl, content);
-        var json = await response.Content.ReadAsStringAsync();
+        var response = await Http.PostAsync(TokenUrl, content, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -120,9 +120,8 @@ public sealed class OAuthFlow
         return tokens;
     }
 
-    public static async Task<TokenData> RefreshAsync(AppConfig config, TokenData tokens)
+    public static async Task<TokenData> RefreshAsync(AppConfig config, TokenData tokens, CancellationToken cancellationToken = default)
     {
-        using var http = new HttpClient();
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",
@@ -131,8 +130,8 @@ public sealed class OAuthFlow
             ["refresh_token"] = tokens.RefreshToken,
         });
 
-        var response = await http.PostAsync(TokenUrl, content);
-        var json = await response.Content.ReadAsStringAsync();
+        var response = await Http.PostAsync(TokenUrl, content, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {

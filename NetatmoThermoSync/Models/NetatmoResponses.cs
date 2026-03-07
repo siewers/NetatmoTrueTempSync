@@ -49,7 +49,7 @@ public record Room
     public string Type { get; init; } = "";
 
     [JsonPropertyName("module_ids")]
-    public List<string> ModuleIds { get; init; } = [];
+    public List<string>? ModuleIds { get; init; }
 }
 
 public record HomeModule

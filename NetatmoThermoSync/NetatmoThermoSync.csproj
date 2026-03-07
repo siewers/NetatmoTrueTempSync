@@ -3,7 +3,6 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
-    <NoWarn>IL2104</NoWarn>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <PublishTrimmed>true</PublishTrimmed>
@@ -12,12 +11,11 @@
   <ItemGroup>
     <TrimmerRootAssembly Include="NetatmoThermoSync" />
     <TrimmerRootAssembly Include="Spectre.Console" />
-    <TrimmerRootAssembly Include="Spectre.Console.Cli" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Spectre.Console" Version="0.54.0" />
-    <PackageReference Include="Spectre.Console.Cli" Version="0.53.1" />
+    <PackageReference Include="System.CommandLine" Version="2.0.3" />
   </ItemGroup>
 
 </Project>

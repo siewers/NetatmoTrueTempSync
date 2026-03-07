@@ -1,27 +1,36 @@
-using System.ComponentModel;
+using System.CommandLine;
 using System.Globalization;
 using NetatmoThermoSync.Api;
 using NetatmoThermoSync.Auth;
 using NetatmoThermoSync.Models;
 using Spectre.Console;
-using Spectre.Console.Cli;
 
 namespace NetatmoThermoSync.Commands;
 
-public sealed class SyncSettings : CommandSettings
+public static class SyncCommand
 {
-    [CommandOption("--dry-run")]
-    [Description("Show what would be synced without making changes")]
-    public bool DryRun { get; set; }
+    public static Command Create()
+    {
+        var dryRunOption = new Option<bool>("--dry-run") { Description = "Show what would be synced without making changes" };
+        var homeOption = new Option<string?>("--home") { Description = "Home name or ID to sync (defaults to first home)" };
 
-    [CommandOption("--home")]
-    [Description("Home name or ID to sync (defaults to first home)")]
-    public string? HomeName { get; set; }
-}
+        var command = new Command("sync", "Sync thermostat readings to valve true_temperature corrections.")
+        {
+            dryRunOption,
+            homeOption,
+        };
 
-public sealed class SyncCommand : AsyncCommand<SyncSettings>
-{
-    public override async Task<int> ExecuteAsync(CommandContext context, SyncSettings settings, CancellationToken cancellationToken)
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var dryRun = parseResult.GetValue(dryRunOption);
+            var homeName = parseResult.GetValue(homeOption);
+            return await ExecuteAsync(dryRun, homeName, cancellationToken);
+        });
+
+        return command;
+    }
+
+    private static async Task<int> ExecuteAsync(bool dryRun, string? homeName, CancellationToken cancellationToken)
     {
         var (config, tokens) = StatusCommand.LoadConfigOrFail();
         using var client = new NetatmoClient(config, tokens);
@@ -35,44 +44,43 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
         // Authenticate via web session for truetemperature access
         using var webAuth = new WebSessionAuth();
         AnsiConsole.MarkupLine("[dim]Logging in via web session...[/]");
-        await webAuth.LoginAsync(config.NetatmoEmail, config.NetatmoPassword);
+        await webAuth.LoginAsync(config.NetatmoEmail, config.NetatmoPassword, cancellationToken);
 
-        if (settings.DryRun)
+        if (dryRun)
         {
             AnsiConsole.MarkupLine("[yellow]Dry run mode — no changes will be made.[/]");
         }
 
         try
         {
-            await RunSyncCycleAsync(client, webAuth, settings, config);
+            await RunSyncCycleAsync(client, webAuth, dryRun, homeName, config, cancellationToken);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Sync error: {ex}");
+            await Console.Error.WriteLineAsync($"Sync error: {ex}");
             return 1;
         }
 
         return 0;
     }
 
-    private static async Task RunSyncCycleAsync(NetatmoClient client, WebSessionAuth webAuth, SyncSettings settings, AppConfig config)
+    private static async Task RunSyncCycleAsync(NetatmoClient client, WebSessionAuth webAuth, bool dryRun, string? homeName, AppConfig config, CancellationToken cancellationToken)
     {
-        var homesData = await client.GetHomesDataAsync();
+        var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
 
-        var home = !string.IsNullOrEmpty(settings.HomeName)
+        var home = !string.IsNullOrEmpty(homeName)
             ? homes.FirstOrDefault(h =>
-                  h.Name.Equals(settings.HomeName, StringComparison.OrdinalIgnoreCase) ||
-                  h.Id == settings.HomeName) ??
-              throw new NetatmoException($"Home '{settings.HomeName}' not found.")
+                  h.Name.Equals(homeName, StringComparison.OrdinalIgnoreCase) ||
+                  h.Id == homeName) ??
+              throw new NetatmoException($"Home '{homeName}' not found.")
             : homes.FirstOrDefault() ?? throw new NetatmoException("No homes found.");
 
-        var status = await client.GetHomeStatusAsync(home.Id);
+        var status = await client.GetHomeStatusAsync(home.Id, cancellationToken);
         var roomStatuses = status.Body?.Home?.Rooms ?? [];
-        var moduleStatuses = status.Body?.Home?.Modules ?? [];
 
         // Get weather station indoor module readings
-        var indoorReadings = await GetIndoorReadingsAsync(client);
+        var indoorReadings = await GetIndoorReadingsAsync(client, cancellationToken);
 
         var timestamp = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"[{timestamp}]")}[/] Syncing [bold]{Markup.Escape(home.Name)}[/]...");
@@ -138,9 +146,9 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
             AnsiConsole.MarkupLine(
                 $"  [bold]{Markup.Escape(room.Name)}[/] — sensor [blue]{Markup.Escape(sensor.Name)}[/] [cyan]{sensor.Temperature:F1}°C[/], valve [yellow]{valveTemp:F1}°C[/] (delta {delta:+0.0;-0.0}°C) → [green]{valveNames}[/]");
 
-            if (!settings.DryRun)
+            if (!dryRun)
             {
-                await webAuth.SetTrueTemperatureAsync(home.Id, room.Id, valveTemp, sensor.Temperature);
+                await webAuth.SetTrueTemperatureAsync(home.Id, room.Id, valveTemp, sensor.Temperature, cancellationToken);
             }
 
             syncCount++;
@@ -154,35 +162,33 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
         AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"[{timestamp}]")}[/] Sync complete — {syncCount} room(s) updated.");
     }
 
-    private static async Task<List<IndoorReading>> GetIndoorReadingsAsync(NetatmoClient client)
+    private static async Task<List<IndoorReading>> GetIndoorReadingsAsync(NetatmoClient client, CancellationToken cancellationToken)
     {
         var readings = new List<IndoorReading>();
 
         try
         {
-            var stationsData = await client.GetStationsDataAsync();
+            var stationsData = await client.GetStationsDataAsync(cancellationToken);
             var devices = stationsData.Body?.Devices ?? [];
 
             foreach (var station in devices)
             {
                 // The base station (NAMain) is itself an indoor module
-                if (station.Type == "NAMain" && station.DashboardData?.Temperature is not null)
+                if (station is { Type: "NAMain", DashboardData.Temperature: not null })
                 {
                     readings.Add(new IndoorReading(
                         station.ModuleName,
-                        station.DashboardData.Temperature.Value,
-                        station.Id));
+                        station.DashboardData.Temperature.Value));
                 }
 
                 // Additional indoor modules (NAModule4)
-                foreach (var module in station.Modules.Where(m => m.Type == "NAModule4" && m.Reachable))
+                foreach (var module in station.Modules.Where(m => m is { Type: "NAModule4", Reachable: true }))
                 {
                     if (module.DashboardData?.Temperature is not null)
                     {
                         readings.Add(new IndoorReading(
                             module.ModuleName,
-                            module.DashboardData.Temperature.Value,
-                            module.Id));
+                            module.DashboardData.Temperature.Value));
                     }
                 }
             }
@@ -195,5 +201,5 @@ public sealed class SyncCommand : AsyncCommand<SyncSettings>
         return readings;
     }
 
-    private sealed record IndoorReading(string Name, double Temperature, string ModuleId);
+    private sealed record IndoorReading(string Name, double Temperature);
 }

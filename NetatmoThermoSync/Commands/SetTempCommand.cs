@@ -1,62 +1,69 @@
-using System.ComponentModel;
+using System.CommandLine;
 using NetatmoThermoSync.Api;
 using Spectre.Console;
-using Spectre.Console.Cli;
 
 namespace NetatmoThermoSync.Commands;
 
-public sealed class SetTempSettings : CommandSettings
+public static class SetTempCommand
 {
-    [CommandArgument(0, "<ROOM>")]
-    [Description("Room name (case-insensitive partial match)")]
-    public string RoomName { get; set; } = "";
+    public static Command Create()
+    {
+        var roomArgument = new Argument<string>("room") { Description = "Room name (case-insensitive partial match)" };
+        var tempArgument = new Argument<double>("temp") { Description = "Target temperature in °C" };
+        var durationOption = new Option<int?>("--duration", "-d") { Description = "Duration in minutes (default: until next schedule change)" };
+        var homeOption = new Option<string?>("--home") { Description = "Home name or ID (defaults to first home)" };
 
-    [CommandArgument(1, "<TEMP>")]
-    [Description("Target temperature in °C")]
-    public double Temperature { get; set; }
+        var command = new Command("set", "Set a room's target temperature manually.")
+        {
+            roomArgument,
+            tempArgument,
+            durationOption,
+            homeOption,
+        };
 
-    [CommandOption("-d|--duration")]
-    [Description("Duration in minutes (default: until next schedule change)")]
-    public int? DurationMinutes { get; set; }
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var roomName = parseResult.GetValue(roomArgument);
+            var temperature = parseResult.GetValue(tempArgument);
+            var durationMinutes = parseResult.GetValue(durationOption);
+            var homeName = parseResult.GetValue(homeOption);
+            return await ExecuteAsync(roomName!, temperature, durationMinutes, homeName, cancellationToken);
+        });
 
-    [CommandOption("--home")]
-    [Description("Home name or ID (defaults to first home)")]
-    public string? HomeName { get; set; }
-}
+        return command;
+    }
 
-public sealed class SetTempCommand : AsyncCommand<SetTempSettings>
-{
-    public override async Task<int> ExecuteAsync(CommandContext context, SetTempSettings settings, CancellationToken cancellationToken)
+    private static async Task<int> ExecuteAsync(string roomName, double temperature, int? durationMinutes, string? homeName, CancellationToken cancellationToken)
     {
         var (config, tokens) = StatusCommand.LoadConfigOrFail();
         using var client = new NetatmoClient(config, tokens);
 
-        var homesData = await client.GetHomesDataAsync();
+        var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
 
-        var home = !string.IsNullOrEmpty(settings.HomeName)
+        var home = !string.IsNullOrEmpty(homeName)
             ? homes.FirstOrDefault(h =>
-                  h.Name.Equals(settings.HomeName, StringComparison.OrdinalIgnoreCase) ||
-                  h.Id == settings.HomeName) ??
-              throw new NetatmoException($"Home '{settings.HomeName}' not found.")
+                  h.Name.Equals(homeName, StringComparison.OrdinalIgnoreCase) ||
+                  h.Id == homeName) ??
+              throw new NetatmoException($"Home '{homeName}' not found.")
             : homes.FirstOrDefault() ?? throw new NetatmoException("No homes found.");
 
         var room = home.Rooms.FirstOrDefault(r =>
-                       r.Name.Contains(settings.RoomName, StringComparison.OrdinalIgnoreCase)) ??
-                   throw new NetatmoException($"Room matching '{settings.RoomName}' not found.");
+                       r.Name.Contains(roomName, StringComparison.OrdinalIgnoreCase)) ??
+                   throw new NetatmoException($"Room matching '{roomName}' not found.");
 
-        int? endTime = settings.DurationMinutes.HasValue
-            ? (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + settings.DurationMinutes.Value * 60)
+        int? endTime = durationMinutes.HasValue
+            ? (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + durationMinutes.Value * 60)
             : null;
 
-        await client.SetRoomThermPointAsync(home.Id, room.Id, settings.Temperature, endTime);
+        await client.SetRoomThermPointAsync(home.Id, room.Id, temperature, endTime, cancellationToken);
 
-        var durationLabel = settings.DurationMinutes.HasValue
-            ? $" for {settings.DurationMinutes} minutes"
+        var durationLabel = durationMinutes.HasValue
+            ? $" for {durationMinutes} minutes"
             : " until next schedule change";
 
         AnsiConsole.MarkupLine(
-            $"[green]Set [bold]{room.Name}[/] to [bold]{settings.Temperature:F1}°C[/]{durationLabel}.[/]");
+            $"[green]Set [bold]{room.Name}[/] to [bold]{temperature:F1}°C[/]{durationLabel}.[/]");
 
         return 0;
     }

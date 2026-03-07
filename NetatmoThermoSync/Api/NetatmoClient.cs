@@ -22,23 +22,23 @@ public sealed class NetatmoClient : IDisposable
 
     public void Dispose() => _http.Dispose();
 
-    private async Task EnsureTokenValidAsync()
+    private async Task EnsureTokenValidAsync(CancellationToken cancellationToken)
     {
         if (!TokenStore.IsTokenExpired(_tokens))
         {
             return;
         }
 
-        _tokens = await OAuthFlow.RefreshAsync(_config, _tokens);
+        _tokens = await OAuthFlow.RefreshAsync(_config, _tokens, cancellationToken);
         TokenStore.SaveTokens(_tokens);
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _tokens.AccessToken);
     }
 
-    public async Task<NetatmoResponse<HomesDataBody>> GetHomesDataAsync()
+    public async Task<NetatmoResponse<HomesDataBody>> GetHomesDataAsync(CancellationToken cancellationToken = default)
     {
-        await EnsureTokenValidAsync();
-        var response = await _http.GetAsync($"{BaseUrl}/homesdata");
-        var json = await response.Content.ReadAsStringAsync();
+        await EnsureTokenValidAsync(cancellationToken);
+        var response = await _http.GetAsync($"{BaseUrl}/homesdata", cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -48,11 +48,11 @@ public sealed class NetatmoClient : IDisposable
         return JsonSerializer.Deserialize(json, AppJsonContext.Default.NetatmoResponseHomesDataBody) ?? throw new NetatmoException("Failed to parse homesdata response.");
     }
 
-    public async Task<NetatmoResponse<HomeStatusBody>> GetHomeStatusAsync(string homeId)
+    public async Task<NetatmoResponse<HomeStatusBody>> GetHomeStatusAsync(string homeId, CancellationToken cancellationToken = default)
     {
-        await EnsureTokenValidAsync();
-        var response = await _http.GetAsync($"{BaseUrl}/homestatus?home_id={Uri.EscapeDataString(homeId)}");
-        var json = await response.Content.ReadAsStringAsync();
+        await EnsureTokenValidAsync(cancellationToken);
+        var response = await _http.GetAsync($"{BaseUrl}/homestatus?home_id={Uri.EscapeDataString(homeId)}", cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -62,11 +62,11 @@ public sealed class NetatmoClient : IDisposable
         return JsonSerializer.Deserialize(json, AppJsonContext.Default.NetatmoResponseHomeStatusBody) ?? throw new NetatmoException("Failed to parse homestatus response.");
     }
 
-    public async Task<NetatmoResponse<StationsDataBody>> GetStationsDataAsync()
+    public async Task<NetatmoResponse<StationsDataBody>> GetStationsDataAsync(CancellationToken cancellationToken = default)
     {
-        await EnsureTokenValidAsync();
-        var response = await _http.GetAsync($"{BaseUrl}/getstationsdata");
-        var json = await response.Content.ReadAsStringAsync();
+        await EnsureTokenValidAsync(cancellationToken);
+        var response = await _http.GetAsync($"{BaseUrl}/getstationsdata", cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -76,9 +76,9 @@ public sealed class NetatmoClient : IDisposable
         return JsonSerializer.Deserialize(json, AppJsonContext.Default.NetatmoResponseStationsDataBody) ?? throw new NetatmoException("Failed to parse getstationsdata response.");
     }
 
-    public async Task SetRoomThermPointAsync(string homeId, string roomId, double temp, int? endTime = null)
+    public async Task SetRoomThermPointAsync(string homeId, string roomId, double temp, int? endTime = null, CancellationToken cancellationToken = default)
     {
-        await EnsureTokenValidAsync();
+        await EnsureTokenValidAsync(cancellationToken);
         var parameters = new Dictionary<string, string>
         {
             ["home_id"] = homeId,
@@ -93,8 +93,8 @@ public sealed class NetatmoClient : IDisposable
         }
 
         var content = new FormUrlEncodedContent(parameters);
-        var response = await _http.PostAsync($"{BaseUrl}/setroomthermpoint", content);
-        var json = await response.Content.ReadAsStringAsync();
+        var response = await _http.PostAsync($"{BaseUrl}/setroomthermpoint", content, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
