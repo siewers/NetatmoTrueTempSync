@@ -1,7 +1,6 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Text;
+using System.Net.Http.Json;
 using System.Text.Json;
 using NetatmoThermoSync.Auth;
 using NetatmoThermoSync.Models;
@@ -82,46 +81,16 @@ public sealed class NetatmoClient : IDisposable
         return JsonSerializer.Deserialize(json, AppJsonContext.Default.NetatmoResponseStationsDataBody) ?? throw new NetatmoException("Failed to parse getstationsdata response.");
     }
 
-    public async Task SetRoomThermPointAsync(string homeId, string roomId, double temp, int? endTime = null, CancellationToken cancellationToken = default)
-    {
-        var response = await SendWithRetryAsync(HttpMethod.Post, $"{BaseUrl}/setroomthermpoint", () =>
-        {
-            var parameters = new Dictionary<string, string>
-            {
-                ["home_id"] = homeId,
-                ["room_id"] = roomId,
-                ["mode"] = "manual",
-                ["temp"] = temp.ToString("F1", CultureInfo.InvariantCulture),
-            };
-
-            if (endTime.HasValue)
-            {
-                parameters["endtime"] = endTime.Value.ToString(CultureInfo.InvariantCulture);
-            }
-
-            return new FormUrlEncodedContent(parameters);
-        }, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new NetatmoException($"setroomthermpoint failed ({response.StatusCode}): {json}");
-        }
-    }
-
     public async Task SetTrueTemperatureAsync(string homeId, string roomId, double currentTemp, double correctedTemp, CancellationToken cancellationToken = default)
     {
         var response = await SendWithRetryAsync(HttpMethod.Post, $"{BaseUrl}/truetemperature", () =>
-            new StringContent(
-                JsonSerializer.Serialize(new TrueTemperatureRequest
-                {
-                    HomeId = homeId,
-                    RoomId = roomId,
-                    CurrentTemperature = currentTemp,
-                    CorrectedTemperature = correctedTemp,
-                }, AppJsonContext.Default.TrueTemperatureRequest),
-                Encoding.UTF8,
-                "application/json"), cancellationToken);
+            JsonContent.Create(new TrueTemperatureRequest
+            {
+                HomeId = homeId,
+                RoomId = roomId,
+                CurrentTemperature = currentTemp,
+                CorrectedTemperature = correctedTemp,
+            }, AppJsonContext.Default.TrueTemperatureRequest), cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
