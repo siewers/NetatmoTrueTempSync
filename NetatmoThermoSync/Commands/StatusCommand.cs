@@ -72,7 +72,8 @@ public static class StatusCommand
                        .AddColumn("Setpoint")
                        .AddColumn("Mode")
                        .AddColumn("Heating")
-                       .AddColumn("Devices");
+                       .AddColumn("Devices")
+                       .AddColumn("Battery");
 
             foreach (var room in home.Rooms)
             {
@@ -86,7 +87,7 @@ public static class StatusCommand
                                       .Where(m => room.ModuleIds?.Contains(m.Id) == true)
                                       .ToList();
 
-                var moduleInfo = roomModules.Select(m =>
+                var modules = roomModules.Select(m =>
                 {
                     var ms = moduleStatuses.FirstOrDefault(s => s.Id == m.Id);
                     var typeLabel = m.Type switch
@@ -94,22 +95,26 @@ public static class StatusCommand
                         "NATherm1" => "[blue]Thermostat[/]",
                         "NRV" => "[green]Valve[/]",
                         "NAPlug" => "[dim]Relay[/]",
+                        "NAMain" => "[cyan]Base Station[/]",
+                        "NAModule4" => "[cyan]Indoor[/]",
+                        "NAModule1" => "[dim]Outdoor[/]",
+                        "NAModule2" => "[dim]Wind[/]",
+                        "NAModule3" => "[dim]Rain[/]",
                         _ => m.Type,
                     };
 
-                    var battery = ms?.BatteryState switch
+                    var batteryColor = ms?.BatteryState switch
                     {
-                        "full" => "[green]████[/]",
-                        "high" => "[green]███░[/]",
-                        "medium" => "[yellow]██░░[/]",
-                        "low" => "[red]█░░░[/]",
-                        "very low" => "[red]░░░░[/]",
-                        _ => "[dim]n/a[/]",
+                        "full" or "high" => "green",
+                        "medium" => "yellow",
+                        "low" or "very low" => "red",
+                        _ => "dim",
                     };
+                    var battery = $"[{batteryColor}]{ms?.BatteryState ?? "-"}[/]";
 
                     var reachable = ms?.Reachable == true ? "" : " [red](offline)[/]";
-                    return $"{typeLabel} {Markup.Escape(m.Name)}{reachable} {battery}";
-                });
+                    return (Device: $"{typeLabel} {Markup.Escape(m.Name)}{reachable}", Battery: battery);
+                }).ToList();
 
                 // Match indoor sensor to this room by name
                 var sensor = indoorReadings.FirstOrDefault(r =>
@@ -154,7 +159,8 @@ public static class StatusCommand
                         : "[dim]n/a[/]",
                     rs.SetpointMode ?? "[dim]n/a[/]",
                     heatingLabel,
-                    string.Join("\n", moduleInfo)
+                    string.Join("\n", modules.Select(m => m.Device)),
+                    string.Join("\n", modules.Select(m => m.Battery))
                 );
             }
 
