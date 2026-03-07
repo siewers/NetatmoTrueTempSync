@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Globalization;
 using NetatmoThermoSync.Api;
+using NetatmoThermoSync.Auth;
 using Spectre.Console;
 
 namespace NetatmoThermoSync.Commands;
@@ -10,14 +11,16 @@ public static class DumpCommand
     public static Command Create()
     {
         var command = new Command("dump", "Dump raw API data for debugging device/room associations.");
-        command.SetAction(async (_, cancellationToken) => await ExecuteAsync(cancellationToken));
+        command.SetAction(ExecuteAsync);
         return command;
     }
 
-    private static async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    private static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var (config, tokens) = StatusCommand.LoadConfigOrFail();
-        using var client = new NetatmoClient(config, tokens);
+        var config = await StatusCommand.LoadConfigOrFail(cancellationToken);
+        using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
+        await webAuth.LoginAsync(cancellationToken);
+        using var client = new NetatmoClient(webAuth);
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
@@ -98,7 +101,6 @@ public static class DumpCommand
         catch (Exception ex)
         {
             AnsiConsole.MarkupLine($"[yellow]Could not read weather station data: {Markup.Escape(ex.Message)}[/]");
-            AnsiConsole.MarkupLine("[dim]You may need to re-run 'auth' to grant the read_station scope.[/]");
         }
 
         return 0;

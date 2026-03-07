@@ -6,7 +6,6 @@ var rootCommand = new RootCommand("Netatmo ThermoSync — sync weather station t
     AuthCommand.Create(),
     StatusCommand.Create(),
     SyncCommand.Create(),
-    SetTempCommand.Create(),
     DumpCommand.Create(),
 };
 

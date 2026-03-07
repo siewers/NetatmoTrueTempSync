@@ -11,14 +11,16 @@ public static class StatusCommand
     public static Command Create()
     {
         var command = new Command("status", "Show current temperatures and device status for all rooms.");
-        command.SetAction(async (_, cancellationToken) => await ExecuteAsync(cancellationToken));
+        command.SetAction(ExecuteAsync);
         return command;
     }
 
-    private static async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    private static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var (config, tokens) = LoadConfigOrFail();
-        using var client = new NetatmoClient(config, tokens);
+        var config = await LoadConfigOrFail(cancellationToken);
+        using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
+        await webAuth.LoginAsync(cancellationToken);
+        using var client = new NetatmoClient(webAuth);
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
@@ -49,7 +51,7 @@ public static class StatusCommand
         }
         catch
         {
-            /* read_station scope may not be granted yet */
+            /* weather station data may not be available */
         }
 
         foreach (var home in homes)
@@ -163,10 +165,8 @@ public static class StatusCommand
         return 0;
     }
 
-    internal static (AppConfig config, TokenData tokens) LoadConfigOrFail()
+    internal static async Task<AppConfig> LoadConfigOrFail(CancellationToken cancellationToken)
     {
-        var config = TokenStore.LoadConfig() ?? throw new NetatmoException("Not configured. Run 'auth' first.");
-        var tokens = TokenStore.LoadTokens() ?? throw new NetatmoException("Not authenticated. Run 'auth' first.");
-        return (config, tokens);
+        return await TokenStore.LoadConfig(cancellationToken) ?? throw new NetatmoException("Not configured. Run 'auth' first.");
     }
 }

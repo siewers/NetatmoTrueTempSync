@@ -32,19 +32,12 @@ public static class SyncCommand
 
     private static async Task<int> ExecuteAsync(bool dryRun, string? homeName, CancellationToken cancellationToken)
     {
-        var (config, tokens) = StatusCommand.LoadConfigOrFail();
-        using var client = new NetatmoClient(config, tokens);
+        var config = await StatusCommand.LoadConfigOrFail(cancellationToken);
 
-        if (string.IsNullOrEmpty(config.NetatmoEmail) || string.IsNullOrEmpty(config.NetatmoPassword))
-        {
-            AnsiConsole.MarkupLine("[red]Netatmo account credentials not configured. Run 'auth' to set them up.[/]");
-            return 1;
-        }
-
-        // Authenticate via web session for truetemperature access
-        using var webAuth = new WebSessionAuth();
-        AnsiConsole.MarkupLine("[dim]Logging in via web session...[/]");
-        await webAuth.LoginAsync(config.NetatmoEmail, config.NetatmoPassword, cancellationToken);
+        // Authenticate via web session (uses cached session when available)
+        using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
+        await webAuth.LoginAsync(cancellationToken);
+        using var client = new NetatmoClient(webAuth);
 
         if (dryRun)
         {
@@ -53,7 +46,7 @@ public static class SyncCommand
 
         try
         {
-            await RunSyncCycleAsync(client, webAuth, dryRun, homeName, config, cancellationToken);
+            await RunSyncCycleAsync(client, dryRun, homeName, config, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -64,7 +57,7 @@ public static class SyncCommand
         return 0;
     }
 
-    private static async Task RunSyncCycleAsync(NetatmoClient client, WebSessionAuth webAuth, bool dryRun, string? homeName, AppConfig config, CancellationToken cancellationToken)
+    private static async Task RunSyncCycleAsync(NetatmoClient client, bool dryRun, string? homeName, AppConfig config, CancellationToken cancellationToken)
     {
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
@@ -87,7 +80,7 @@ public static class SyncCommand
 
         if (indoorReadings.Count == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]  No weather station indoor modules found. Run 'auth' again to grant read_station scope.[/]");
+            AnsiConsole.MarkupLine("[yellow]  No weather station indoor modules found.[/]");
             return;
         }
 
@@ -148,7 +141,7 @@ public static class SyncCommand
 
             if (!dryRun)
             {
-                await webAuth.SetTrueTemperatureAsync(home.Id, room.Id, valveTemp, sensor.Temperature, cancellationToken);
+                await client.SetTrueTemperatureAsync(home.Id, room.Id, valveTemp, sensor.Temperature, cancellationToken);
             }
 
             syncCount++;

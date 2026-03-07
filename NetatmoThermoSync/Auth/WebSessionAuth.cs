@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using NetatmoThermoSync.Models;
 
@@ -7,7 +6,8 @@ namespace NetatmoThermoSync.Auth;
 
 /// <summary>
 ///     Authenticates via Netatmo's web login flow (cookie-based session).
-///     Required for the /api/truetemperature endpoint which doesn't accept third-party OAuth tokens.
+///     The resulting access token works with both the public API and the
+///     undocumented /api/truetemperature endpoint.
 /// </summary>
 public sealed class WebSessionAuth : IDisposable
 {
@@ -15,21 +15,98 @@ public sealed class WebSessionAuth : IDisposable
     private const string UserAgent = "netatmo-home";
 
     private readonly CookieContainer _cookies = new();
+    private readonly NetatmoCredentials _credentials;
     private readonly HttpClient _http;
 
-    public WebSessionAuth()
+    public WebSessionAuth(NetatmoCredentials credentials)
     {
+        _credentials = credentials;
+
         var handler = new HttpClientHandler { CookieContainer = _cookies, AllowAutoRedirect = true };
         _http = new HttpClient(handler);
         _http.DefaultRequestHeaders.Add("User-Agent", UserAgent);
         _http.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
-    private string? AccessToken { get; set; }
+    internal string? AccessToken { get; private set; }
 
     public void Dispose() => _http.Dispose();
 
-    public async Task LoginAsync(string email, string password, CancellationToken cancellationToken = default)
+    /// <summary>
+    ///     Tries the cached web session token first. Falls back to a full login only if no
+    ///     cached token exists.
+    /// </summary>
+    public async Task LoginAsync(CancellationToken cancellationToken = default)
+    {
+        var cached = await TokenStore.LoadWebSession(cancellationToken);
+        if (cached is not null)
+        {
+            AccessToken = cached.AccessToken;
+            return;
+        }
+
+        await FullLoginAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Attempts to re-authenticate when an API call returns 401/403.
+    ///     Tries the refresh token first, then falls back to a full login.
+    /// </summary>
+    internal async Task<bool> TryReauthenticateAsync(CancellationToken cancellationToken)
+    {
+        return await TryRefreshSessionAsync(cancellationToken) || await TryFullLoginAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Attempts to refresh the web session using the cached refresh token cookie.
+    ///     Injects the refresh token into the cookie container and hits /access/keychain.
+    /// </summary>
+    private async Task<bool> TryRefreshSessionAsync(CancellationToken cancellationToken)
+    {
+        var cached = await TokenStore.LoadWebSession(cancellationToken);
+        if (cached?.RefreshToken is null)
+        {
+            return false;
+        }
+
+        _cookies.Add(new Uri("https://auth.netatmo.com"),
+            new Cookie("authnetatmocomrefresh_token", cached.RefreshToken, "/", ".auth.netatmo.com"));
+
+        await _http.GetAsync($"{AuthBase}/access/keychain?next_url=https://my.netatmo.com", cancellationToken);
+
+        var accessToken = ExtractAccessToken();
+        if (accessToken is null)
+        {
+            return false;
+        }
+
+        AccessToken = accessToken;
+
+        // Grab the potentially refreshed refresh token
+        var refreshCookie = _cookies.GetCookies(new Uri("https://auth.netatmo.com"))["authnetatmocomrefresh_token"];
+        await TokenStore.SaveWebSession(new WebSessionData
+        {
+            AccessToken = AccessToken,
+            RefreshToken = refreshCookie?.Value ?? cached.RefreshToken,
+        }, cancellationToken);
+
+        return true;
+    }
+
+    private async Task<bool> TryFullLoginAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await FullLoginAsync(cancellationToken);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task FullLoginAsync(CancellationToken cancellationToken)
     {
         // Step 1: Get initial session cookie
         var loginPage = await _http.GetAsync($"{AuthBase}/en-us/access/login", cancellationToken);
@@ -49,14 +126,14 @@ public sealed class WebSessionAuth : IDisposable
         }
 
         var csrfJson = await csrfResponse.Content.ReadAsStringAsync(cancellationToken);
-        var csrfDoc = JsonDocument.Parse(csrfJson);
+        using var csrfDoc = JsonDocument.Parse(csrfJson);
         var csrfToken = csrfDoc.RootElement.GetProperty("token").GetString() ?? throw new NetatmoException("CSRF token not found in response");
 
         // Step 4: Submit login credentials
         var loginPayload = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["email"] = email,
-            ["password"] = password,
+            ["email"] = _credentials.Email,
+            ["password"] = _credentials.Password,
             ["stay_logged"] = "on",
             ["_token"] = csrfToken,
         });
@@ -67,59 +144,29 @@ public sealed class WebSessionAuth : IDisposable
         await _http.GetAsync($"{AuthBase}/access/keychain?next_url=https://my.netatmo.com", cancellationToken);
 
         // Step 6: Extract access token from cookies
-        var allCookies = _cookies.GetCookies(new Uri("https://netatmo.com"));
-        var tokenCookie = allCookies["netatmocomaccess_token"];
+        AccessToken = ExtractAccessToken() ?? throw new NetatmoException("Login succeeded but access token cookie not found. Check your credentials.");
 
-        if (tokenCookie is null)
+        // Save both access token and refresh token for session reuse
+        var refreshCookie = _cookies.GetCookies(new Uri("https://auth.netatmo.com"))["authnetatmocomrefresh_token"];
+
+        await TokenStore.SaveWebSession(new WebSessionData
         {
-            // Also check .netatmo.com domain
-            allCookies = _cookies.GetCookies(new Uri("https://auth.netatmo.com"));
-            tokenCookie = allCookies["netatmocomaccess_token"];
-        }
-
-        if (tokenCookie is null)
-        {
-            // Try my.netatmo.com
-            allCookies = _cookies.GetCookies(new Uri("https://my.netatmo.com"));
-            tokenCookie = allCookies["netatmocomaccess_token"];
-        }
-
-        if (tokenCookie is null)
-        {
-            throw new NetatmoException("Login succeeded but access token cookie not found. Check your credentials.");
-        }
-
-        AccessToken = tokenCookie.Value.Replace("%7C", "|");
+            AccessToken = AccessToken,
+            RefreshToken = refreshCookie?.Value,
+        }, cancellationToken);
     }
 
-    public async Task SetTrueTemperatureAsync(string homeId, string roomId, double currentTemp, double correctedTemp, CancellationToken cancellationToken = default)
+    private string? ExtractAccessToken()
     {
-        if (AccessToken is null)
+        foreach (var domain in new[] { "https://netatmo.com", "https://auth.netatmo.com", "https://my.netatmo.com" })
         {
-            throw new NetatmoException("Not authenticated. Call LoginAsync first.");
+            var cookie = _cookies.GetCookies(new Uri(domain))["netatmocomaccess_token"];
+            if (cookie is not null)
+            {
+                return cookie.Value.Replace("%7C", "|");
+            }
         }
 
-        var payload = new TrueTemperatureRequest
-        {
-            HomeId = homeId,
-            RoomId = roomId,
-            CurrentTemperature = currentTemp,
-            CorrectedTemperature = correctedTemp,
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.netatmo.com/api/truetemperature");
-        request.Headers.Add("Authorization", $"Bearer {AccessToken}");
-        request.Content = new StringContent(
-            JsonSerializer.Serialize(payload, AppJsonContext.Default.TrueTemperatureRequest),
-            Encoding.UTF8,
-            "application/json");
-
-        var response = await _http.SendAsync(request, cancellationToken);
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new NetatmoException($"truetemperature failed ({response.StatusCode}): {responseJson}");
-        }
+        return null;
     }
 }
