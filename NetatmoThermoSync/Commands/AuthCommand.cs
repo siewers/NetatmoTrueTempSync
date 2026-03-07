@@ -23,26 +23,41 @@ public static class AuthCommand
 
         // OAuth2 credentials (for reading data)
         AnsiConsole.MarkupLine("[bold]OAuth2 API credentials[/] [dim](from dev.netatmo.com)[/]");
-        var clientId = AnsiConsole.Prompt(
-            new TextPrompt<string>("Client ID:")
-               .DefaultValue(existingConfig?.ClientId ?? ""));
+        var clientIdPrompt = new TextPrompt<string>("Client ID:");
+        if (!string.IsNullOrEmpty(existingConfig?.ClientId))
+        {
+            clientIdPrompt.DefaultValue(existingConfig.ClientId);
+        }
 
-        var clientSecret = AnsiConsole.Prompt(
-            new TextPrompt<string>("Client Secret:")
-               .Secret()
-               .DefaultValue(existingConfig?.ClientSecret ?? ""));
+        var clientId = AnsiConsole.Prompt(clientIdPrompt);
+
+        var clientSecretPrompt = new TextPrompt<string>("Client Secret:").Secret();
+        if (!string.IsNullOrEmpty(existingConfig?.ClientSecret))
+        {
+            clientSecretPrompt.DefaultValue(existingConfig.ClientSecret);
+        }
+
+        var clientSecret = AnsiConsole.Prompt(clientSecretPrompt);
 
         // Netatmo account credentials (for truetemperature)
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Netatmo account credentials[/] [dim](for true temperature calibration)[/]");
-        var email = AnsiConsole.Prompt(
-            new TextPrompt<string>("Email:")
-               .DefaultValue(existingConfig?.NetatmoEmail ?? ""));
 
-        var password = AnsiConsole.Prompt(
-            new TextPrompt<string>("Password:")
-               .Secret()
-               .DefaultValue(existingConfig?.NetatmoPassword ?? ""));
+        var emailPrompt = new TextPrompt<string>("Email:");
+        if (!string.IsNullOrEmpty(existingConfig?.NetatmoEmail))
+        {
+            emailPrompt.DefaultValue(existingConfig.NetatmoEmail);
+        }
+
+        var email = AnsiConsole.Prompt(emailPrompt);
+
+        var passwordPrompt = new TextPrompt<string>("Password:").Secret();
+        if (!string.IsNullOrEmpty(existingConfig?.NetatmoPassword))
+        {
+            passwordPrompt.DefaultValue(existingConfig.NetatmoPassword);
+        }
+
+        var password = AnsiConsole.Prompt(passwordPrompt);
 
         var config = new AppConfig
         {
@@ -58,8 +73,8 @@ public static class AuthCommand
         AnsiConsole.WriteLine();
         try
         {
-            var webAuth = new WebSessionAuth();
-            await webAuth.LoginAsync(email, password, cancellationToken);
+            var webAuth = new WebSessionAuth(new NetatmoCredentials(email, password));
+            await webAuth.LoginAsync(cancellationToken);
             AnsiConsole.MarkupLine("[bold green]Web session login successful![/]");
         }
         catch (Exception ex)

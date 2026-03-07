@@ -35,16 +35,9 @@ public static class SyncCommand
         var (config, tokens) = StatusCommand.LoadConfigOrFail();
         using var client = new NetatmoClient(config, tokens);
 
-        if (string.IsNullOrEmpty(config.NetatmoEmail) || string.IsNullOrEmpty(config.NetatmoPassword))
-        {
-            AnsiConsole.MarkupLine("[red]Netatmo account credentials not configured. Run 'auth' to set them up.[/]");
-            return 1;
-        }
-
-        // Authenticate via web session for truetemperature access
-        using var webAuth = new WebSessionAuth();
-        AnsiConsole.MarkupLine("[dim]Logging in via web session...[/]");
-        await webAuth.LoginAsync(config.NetatmoEmail, config.NetatmoPassword, cancellationToken);
+        // Authenticate via web session for truetemperature access (uses cached session when available)
+        using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
+        await webAuth.LoginAsync(cancellationToken);
 
         if (dryRun)
         {

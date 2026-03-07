@@ -32,7 +32,7 @@ public static class TokenStore
     public static void SaveTokens(TokenData tokens)
     {
         EnsureConfigDir();
-        var json = JsonSerializer.Serialize(tokens, AppJsonIndentedContext.Default.TokenData);
+        var json = JsonSerializer.Serialize(tokens, AppJsonContext.Default.TokenData);
         File.WriteAllText(TokenPath, json);
         if (!OperatingSystem.IsWindows())
         {
@@ -54,11 +54,35 @@ public static class TokenStore
     public static void SaveConfig(AppConfig config)
     {
         EnsureConfigDir();
-        var json = JsonSerializer.Serialize(config, AppJsonIndentedContext.Default.AppConfig);
+        var json = JsonSerializer.Serialize(config, AppJsonContext.Default.AppConfig);
         File.WriteAllText(ConfigPath, json);
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(ConfigPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+    }
+
+    public static WebSessionData? LoadWebSession()
+    {
+        var path = Path.Combine(ConfigDir, "websession.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize(json, AppJsonContext.Default.WebSessionData);
+    }
+
+    public static void SaveWebSession(WebSessionData session)
+    {
+        EnsureConfigDir();
+        var path = Path.Combine(ConfigDir, "websession.json");
+        var json = JsonSerializer.Serialize(session, AppJsonContext.Default.WebSessionData);
+        File.WriteAllText(path, json);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
     }
 

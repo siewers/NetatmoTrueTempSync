@@ -19,21 +19,3 @@ public record TokenData
     [JsonPropertyName("scope")]
     public List<string>? Scope { get; init; }
 }
-
-public record AppConfig
-{
-    [JsonPropertyName("client_id")]
-    public string ClientId { get; init; } = "";
-
-    [JsonPropertyName("client_secret")]
-    public string ClientSecret { get; init; } = "";
-
-    [JsonPropertyName("netatmo_email")]
-    public string? NetatmoEmail { get; init; }
-
-    [JsonPropertyName("netatmo_password")]
-    public string? NetatmoPassword { get; init; }
-
-    [JsonPropertyName("sensor_map")]
-    public Dictionary<string, string>? SensorMap { get; init; }
-}
