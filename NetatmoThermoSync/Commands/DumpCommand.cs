@@ -8,22 +8,10 @@ namespace NetatmoThermoSync.Commands;
 
 public static class DumpCommand
 {
-    public static Command Create()
-    {
-        var command = new Command("dump", "Dump raw API data for debugging device/room associations.");
-        command.SetAction(ExecuteAsync);
-        return command;
-    }
-
-    private static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
+    internal static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
         await StatusCommand.LoadConfigOrFail(cancellationToken);
-        if (!TokenStore.TryLoadCredentials(out var credentials))
-        {
-            throw new NetatmoException("Netatmo credentials not configured. Run 'auth' first.");
-        }
-
-        using var client = new NetatmoClient(credentials);
+        using var client = new NetatmoClient(TokenStore.LoadCredentials());
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];

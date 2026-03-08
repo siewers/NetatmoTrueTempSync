@@ -9,36 +9,20 @@ namespace NetatmoThermoSync.Commands;
 
 public static class SyncCommand
 {
-    public static Command Create()
+    internal static readonly Option<bool> DryRunOption = new("--dry-run") { Description = "Show what would be synced without making changes" };
+    internal static readonly Option<string?> HomeOption = new("--home") { Description = "Home name or ID to sync (defaults to first home)" };
+
+    internal static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var dryRunOption = new Option<bool>("--dry-run") { Description = "Show what would be synced without making changes" };
-        var homeOption = new Option<string?>("--home") { Description = "Home name or ID to sync (defaults to first home)" };
-
-        var command = new Command("sync", "Sync thermostat readings to valve true_temperature corrections.")
-        {
-            dryRunOption,
-            homeOption,
-        };
-
-        command.SetAction(async (parseResult, cancellationToken) =>
-        {
-            var dryRun = parseResult.GetValue(dryRunOption);
-            var homeName = parseResult.GetValue(homeOption);
-            return await ExecuteAsync(dryRun, homeName, cancellationToken);
-        });
-
-        return command;
+        var dryRun = parseResult.GetValue(DryRunOption);
+        var homeName = parseResult.GetValue(HomeOption);
+        return await RunAsync(dryRun, homeName, cancellationToken);
     }
 
-    private static async Task<int> ExecuteAsync(bool dryRun, string? homeName, CancellationToken cancellationToken)
+    private static async Task<int> RunAsync(bool dryRun, string? homeName, CancellationToken cancellationToken)
     {
         var config = await StatusCommand.LoadConfigOrFail(cancellationToken);
-        if (!TokenStore.TryLoadCredentials(out var credentials))
-        {
-            throw new NetatmoException("Netatmo credentials not configured. Run 'auth' first.");
-        }
-
-        using var client = new NetatmoClient(credentials);
+        using var client = new NetatmoClient(TokenStore.LoadCredentials());
 
         if (dryRun)
         {
