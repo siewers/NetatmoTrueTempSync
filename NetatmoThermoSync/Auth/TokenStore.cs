@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using NetatmoThermoSync.Models;
 
@@ -5,60 +6,62 @@ namespace NetatmoThermoSync.Auth;
 
 public static class TokenStore
 {
-    private static readonly string ConfigDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".config", "netatmo-thermosync");
+    private const string CredentialsSecretKey = "credentials";
+    private const string WebSessionSecretKey = "websession";
+    private static readonly ISecretStore Secrets = CreateSecretStore();
 
-    private static string ConfigPath => Path.Combine(ConfigDir, "config.json");
-
-    private static void EnsureConfigDir()
+    public static bool TryLoadCredentials([NotNullWhen(true)] out NetatmoCredentials? credentials)
     {
-        Directory.CreateDirectory(ConfigDir);
+        if (Secrets.Load(CredentialsSecretKey) is ({ Length: > 0 } email, { Length: > 0 } password))
+        {
+            credentials = new NetatmoCredentials(email, password);
+            return true;
+        }
+
+        credentials = null;
+        return false;
     }
 
-    public static async Task<AppConfig?> LoadConfig(CancellationToken cancellationToken = default)
+    public static void SaveCredentials(string email, string password)
     {
-        if (!File.Exists(ConfigPath))
+        Secrets.Save(CredentialsSecretKey, email, password);
+    }
+
+    public static WebSessionData? LoadWebSession()
+    {
+        var result = Secrets.Load(WebSessionSecretKey);
+        if (result is null)
         {
             return null;
         }
 
-        var json = await File.ReadAllTextAsync(ConfigPath, cancellationToken);
-        return JsonSerializer.Deserialize(json, AppJsonContext.Default.AppConfig);
+        var session = JsonSerializer.Deserialize(result.Value.Secret, AppJsonContext.Default.WebSessionData);
+        return session is { AccessToken.Length: > 0 } ? session : null;
     }
 
-    public static async Task SaveConfig(AppConfig config, CancellationToken cancellationToken)
+    public static void SaveWebSession(WebSessionData session)
     {
-        EnsureConfigDir();
-        var json = JsonSerializer.Serialize(config, AppJsonContext.Default.AppConfig);
-        await File.WriteAllTextAsync(ConfigPath, json, cancellationToken);
-        if (!OperatingSystem.IsWindows())
+        if (!TryLoadCredentials(out var credentials))
         {
-            File.SetUnixFileMode(ConfigPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-        }
-    }
-
-    public static async Task<WebSessionData?> LoadWebSession(CancellationToken cancellationToken = default)
-    {
-        var path = Path.Combine(ConfigDir, "websession.json");
-        if (!File.Exists(path))
-        {
-            return null;
+            return;
         }
 
-        var json = await File.ReadAllTextAsync(path, cancellationToken);
-        return JsonSerializer.Deserialize(json, AppJsonContext.Default.WebSessionData);
-    }
-
-    public static async Task SaveWebSession(WebSessionData session, CancellationToken cancellationToken)
-    {
-        EnsureConfigDir();
-        var path = Path.Combine(ConfigDir, "websession.json");
         var json = JsonSerializer.Serialize(session, AppJsonContext.Default.WebSessionData);
-        await File.WriteAllTextAsync(path, json, cancellationToken);
-        if (!OperatingSystem.IsWindows())
+        Secrets.Save(WebSessionSecretKey, credentials.Email, json);
+    }
+
+    private static ISecretStore CreateSecretStore()
+    {
+        if (OperatingSystem.IsMacOS())
         {
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            return new KeychainSecretStore();
         }
+
+        if (OperatingSystem.IsLinux() && SecretToolSecretStore.IsAvailable())
+        {
+            return new SecretToolSecretStore();
+        }
+
+        return new FileSecretStore();
     }
 }

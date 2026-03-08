@@ -33,11 +33,12 @@ public static class SyncCommand
     private static async Task<int> ExecuteAsync(bool dryRun, string? homeName, CancellationToken cancellationToken)
     {
         var config = await StatusCommand.LoadConfigOrFail(cancellationToken);
+        if (!TokenStore.TryLoadCredentials(out var credentials))
+        {
+            throw new NetatmoException("Netatmo credentials not configured. Run 'auth' first.");
+        }
 
-        // Authenticate via web session (uses cached session when available)
-        using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
-        await webAuth.LoginAsync(cancellationToken);
-        using var client = new NetatmoClient(webAuth);
+        using var client = new NetatmoClient(credentials);
 
         if (dryRun)
         {

@@ -17,10 +17,12 @@ public static class StatusCommand
 
     private static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var config = await LoadConfigOrFail(cancellationToken);
-        using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
-        await webAuth.LoginAsync(cancellationToken);
-        using var client = new NetatmoClient(webAuth);
+        if (!TokenStore.TryLoadCredentials(out var credentials))
+        {
+            throw new NetatmoException("Netatmo credentials not configured. Run 'auth' first.");
+        }
+
+        using var client = new NetatmoClient(credentials);
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
@@ -173,6 +175,6 @@ public static class StatusCommand
 
     internal static async Task<AppConfig> LoadConfigOrFail(CancellationToken cancellationToken)
     {
-        return await TokenStore.LoadConfig(cancellationToken) ?? throw new NetatmoException("Not configured. Run 'auth' first.");
+        return await ConfigStore.Load(cancellationToken) ?? throw new NetatmoException("Not configured. Run 'auth' first.");
     }
 }

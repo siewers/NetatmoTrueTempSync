@@ -19,39 +19,25 @@ public static class AuthCommand
         AnsiConsole.MarkupLine("[bold yellow]Netatmo Setup[/]");
         AnsiConsole.WriteLine();
 
-        var existingConfig = await TokenStore.LoadConfig(cancellationToken);
-
         AnsiConsole.MarkupLine("[bold]Netatmo account credentials[/]");
 
+        TokenStore.TryLoadCredentials(out var existingCredentials);
+
         var emailPrompt = new TextPrompt<string>("Email:");
-        if (!string.IsNullOrEmpty(existingConfig?.NetatmoEmail))
+        if (!string.IsNullOrEmpty(existingCredentials?.Email))
         {
-            emailPrompt.DefaultValue(existingConfig.NetatmoEmail);
+            emailPrompt.DefaultValue(existingCredentials.Email);
         }
 
         var email = AnsiConsole.Prompt(emailPrompt);
+        var password = AnsiConsole.Prompt(new TextPrompt<string>("Password:").Secret());
 
-        var passwordPrompt = new TextPrompt<string>("Password:").Secret();
-        if (!string.IsNullOrEmpty(existingConfig?.NetatmoPassword))
-        {
-            passwordPrompt.DefaultValue(existingConfig.NetatmoPassword);
-        }
-
-        var password = AnsiConsole.Prompt(passwordPrompt);
-
-        var config = new AppConfig
-        {
-            NetatmoEmail = email,
-            NetatmoPassword = password,
-            SensorMap = existingConfig?.SensorMap,
-        };
-
-        await TokenStore.SaveConfig(config, cancellationToken);
+        TokenStore.SaveCredentials(email, password);
 
         AnsiConsole.WriteLine();
         try
         {
-            using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
+            using var webAuth = new WebSessionAuth(new NetatmoCredentials(email, password));
             await webAuth.LoginAsync(cancellationToken);
             AnsiConsole.MarkupLine("[bold green]Login successful! Session saved.[/]");
             return 0;
