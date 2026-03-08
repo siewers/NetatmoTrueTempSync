@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="NetatmoThermoSync.Tests/NetatmoThermoSync.Tests.csproj" />
-  <Project Path="NetatmoThermoSync/NetatmoThermoSync.csproj" />
-</Solution>

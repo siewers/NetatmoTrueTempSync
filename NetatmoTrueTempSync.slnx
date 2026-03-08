@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="NetatmoTrueTempSync.Tests/NetatmoTrueTempSync.Tests.csproj" />
+  <Project Path="NetatmoTrueTempSync/NetatmoTrueTempSync.csproj" />
+</Solution>
