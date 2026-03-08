@@ -30,7 +30,7 @@ internal sealed class KeychainSecretStore : ISecretStore
             return null;
         }
 
-        return (account, password.TrimEnd('\n'));
+        return (account, DecodePassword(password.TrimEnd('\n')));
     }
 
     public void Save(string key, string account, string secret)
@@ -70,6 +70,32 @@ internal sealed class KeychainSecretStore : ISecretStore
         }
 
         return null;
+    }
+
+    private static string DecodePassword(string value)
+    {
+        // macOS Keychain hex-encodes the password when it contains non-ASCII characters.
+        // Detect hex output (even length, all hex chars) and decode it.
+        if (value.Length % 2 == 0 && value.Length > 0 && IsHex(value))
+        {
+            var bytes = Convert.FromHexString(value);
+            return System.Text.Encoding.UTF8.GetString(bytes);
+        }
+
+        return value;
+    }
+
+    private static bool IsHex(string value)
+    {
+        foreach (var c in value)
+        {
+            if (!char.IsAsciiHexDigit(c))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static (int ExitCode, string Output) RunSecurity(params string[] args)
