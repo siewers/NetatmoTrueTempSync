@@ -21,7 +21,7 @@ public static class SyncCommand
 
     private static async Task<int> RunAsync(bool dryRun, string? homeName, CancellationToken cancellationToken)
     {
-        var config = await StatusCommand.LoadConfigOrFail(cancellationToken);
+        var config = await ConfigStore.LoadAsync(cancellationToken);
         using var client = new NetatmoClient(TokenStore.LoadCredentials());
 
         if (dryRun)
