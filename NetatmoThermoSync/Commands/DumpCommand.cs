@@ -17,10 +17,13 @@ public static class DumpCommand
 
     private static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var config = await StatusCommand.LoadConfigOrFail(cancellationToken);
-        using var webAuth = new WebSessionAuth(config.GetNetatmoCredentials());
-        await webAuth.LoginAsync(cancellationToken);
-        using var client = new NetatmoClient(webAuth);
+        await StatusCommand.LoadConfigOrFail(cancellationToken);
+        if (!TokenStore.TryLoadCredentials(out var credentials))
+        {
+            throw new NetatmoException("Netatmo credentials not configured. Run 'auth' first.");
+        }
+
+        using var client = new NetatmoClient(credentials);
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];

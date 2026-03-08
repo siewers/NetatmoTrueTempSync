@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace NetatmoThermoSync.Models;
 
-public record WebSessionData
+public sealed record WebSessionData
 {
     [JsonPropertyName("access_token")]
     public string AccessToken { get; init; } = "";

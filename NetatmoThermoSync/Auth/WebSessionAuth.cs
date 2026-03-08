@@ -38,7 +38,7 @@ public sealed class WebSessionAuth : IDisposable
     /// </summary>
     public async Task LoginAsync(CancellationToken cancellationToken = default)
     {
-        var cached = await TokenStore.LoadWebSession(cancellationToken);
+        var cached = TokenStore.LoadWebSession();
         if (cached is not null)
         {
             AccessToken = cached.AccessToken;
@@ -63,7 +63,7 @@ public sealed class WebSessionAuth : IDisposable
     /// </summary>
     private async Task<bool> TryRefreshSessionAsync(CancellationToken cancellationToken)
     {
-        var cached = await TokenStore.LoadWebSession(cancellationToken);
+        var cached = TokenStore.LoadWebSession();
         if (cached?.RefreshToken is null)
         {
             return false;
@@ -84,11 +84,11 @@ public sealed class WebSessionAuth : IDisposable
 
         // Grab the potentially refreshed refresh token
         var refreshCookie = _cookies.GetCookies(new Uri("https://auth.netatmo.com"))["authnetatmocomrefresh_token"];
-        await TokenStore.SaveWebSession(new WebSessionData
+        TokenStore.SaveWebSession(new WebSessionData
         {
             AccessToken = AccessToken,
             RefreshToken = refreshCookie?.Value ?? cached.RefreshToken,
-        }, cancellationToken);
+        });
 
         return true;
     }
@@ -149,11 +149,11 @@ public sealed class WebSessionAuth : IDisposable
         // Save both access token and refresh token for session reuse
         var refreshCookie = _cookies.GetCookies(new Uri("https://auth.netatmo.com"))["authnetatmocomrefresh_token"];
 
-        await TokenStore.SaveWebSession(new WebSessionData
+        TokenStore.SaveWebSession(new WebSessionData
         {
             AccessToken = AccessToken,
             RefreshToken = refreshCookie?.Value,
-        }, cancellationToken);
+        });
     }
 
     private string? ExtractAccessToken()
