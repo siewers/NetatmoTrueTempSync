@@ -11,7 +11,7 @@ public record ModuleStatus
     public string Type { get; init; } = "";
 
     [JsonPropertyName("reachable")]
-    public bool Reachable { get; init; }
+    public bool? Reachable { get; init; }
 
     [JsonPropertyName("battery_level")]
     public int? BatteryLevel { get; init; }
