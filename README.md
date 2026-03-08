@@ -26,10 +26,15 @@ Rooms are matched to sensors by name (case-insensitive partial match), or explic
 dotnet publish -c Release
 
 # Authenticate
-./NetatmoThermoSync auth
+./NetatmoThermoSync auth login
+
+# Clear stored credentials and session
+./NetatmoThermoSync auth logout
 ```
 
-The `auth` command prompts for your Netatmo email and password, then performs a web session login. Credentials and session tokens are stored in `~/.config/netatmo-thermosync/`.
+The `auth login` command prompts for your Netatmo email and password, then performs a web session login. Credentials and session tokens are stored securely using the OS secret store (Keychain on macOS, secret-tool on Linux, file-based fallback otherwise).
+
+Use `auth logout` to clear all stored credentials and session data.
 
 ## Usage
 
@@ -56,8 +61,6 @@ By default, rooms are matched to indoor sensors by name. If your room and sensor
 
 ```json
 {
-  "netatmo_email": "...",
-  "netatmo_password": "...",
   "sensor_map": {
     "Living Room": "Indoor Module 1",
     "Office": "Indoor Module 2"

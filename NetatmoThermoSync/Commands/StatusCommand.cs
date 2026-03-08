@@ -8,21 +8,9 @@ namespace NetatmoThermoSync.Commands;
 
 public static class StatusCommand
 {
-    public static Command Create()
+    internal static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var command = new Command("status", "Show current temperatures and device status for all rooms.");
-        command.SetAction(ExecuteAsync);
-        return command;
-    }
-
-    private static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
-    {
-        if (!TokenStore.TryLoadCredentials(out var credentials))
-        {
-            throw new NetatmoException("Netatmo credentials not configured. Run 'auth' first.");
-        }
-
-        using var client = new NetatmoClient(credentials);
+        using var client = new NetatmoClient(TokenStore.LoadCredentials());
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
@@ -112,6 +100,7 @@ public static class StatusCommand
                         "low" or "very low" => "red",
                         _ => "dim",
                     };
+
                     var battery = $"[{batteryColor}]{ms?.BatteryState ?? "-"}[/]";
 
                     var reachable = ms?.Reachable == true ? "" : " [red](offline)[/]";
@@ -175,6 +164,6 @@ public static class StatusCommand
 
     internal static async Task<AppConfig> LoadConfigOrFail(CancellationToken cancellationToken)
     {
-        return await ConfigStore.Load(cancellationToken) ?? throw new NetatmoException("Not configured. Run 'auth' first.");
+        return await ConfigStore.Load(cancellationToken) ?? throw new NetatmoException("Not configured. Run 'auth login' first.");
     }
 }

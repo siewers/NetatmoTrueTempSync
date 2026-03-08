@@ -15,17 +15,6 @@ public sealed class WebSessionAuth : IDisposable
     private const string AuthBase = "https://auth.netatmo.com";
     private static readonly string UserAgent = $"Mozilla/5.0 ({GetPlatformToken()}) NetatmoThermoSync/1.0";
 
-    private static string GetPlatformToken()
-    {
-        var version = Environment.OSVersion.Version;
-
-        if (OperatingSystem.IsMacOS())
-            return $"Macintosh; Intel Mac OS X {version.Major}_{version.Minor}_{version.Build}";
-        if (OperatingSystem.IsLinux())
-            return $"X11; Linux {RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()}";
-        return "compatible";
-    }
-
     private readonly CookieContainer _cookies = new();
     private readonly NetatmoCredentials _credentials;
     private readonly HttpClient _http;
@@ -43,6 +32,23 @@ public sealed class WebSessionAuth : IDisposable
     internal string? AccessToken { get; private set; }
 
     public void Dispose() => _http.Dispose();
+
+    private static string GetPlatformToken()
+    {
+        var version = Environment.OSVersion.Version;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return $"Macintosh; Intel Mac OS X {version.Major}_{version.Minor}_{version.Build}";
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return $"X11; Linux {RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()}";
+        }
+
+        return "compatible";
+    }
 
     /// <summary>
     ///     Tries the cached web session token first. Falls back to a full login only if no

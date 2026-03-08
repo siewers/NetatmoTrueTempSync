@@ -59,6 +59,7 @@ internal sealed class SecretToolSecretStore : ISecretStore
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+
             using var process = Process.Start(psi)!;
             process.WaitForExit();
             return process.ExitCode == 0;
@@ -78,7 +79,9 @@ internal sealed class SecretToolSecretStore : ISecretStore
         };
 
         foreach (var arg in args)
+        {
             psi.ArgumentList.Add(arg);
+        }
 
         return psi;
     }

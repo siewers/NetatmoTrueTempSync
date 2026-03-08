@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace NetatmoThermoSync.Auth;
 
@@ -79,7 +80,7 @@ internal sealed class KeychainSecretStore : ISecretStore
         if (value.Length % 2 == 0 && value.Length > 0 && IsHex(value))
         {
             var bytes = Convert.FromHexString(value);
-            return System.Text.Encoding.UTF8.GetString(bytes);
+            return Encoding.UTF8.GetString(bytes);
         }
 
         return value;
@@ -107,7 +108,9 @@ internal sealed class KeychainSecretStore : ISecretStore
         };
 
         foreach (var arg in args)
+        {
             psi.ArgumentList.Add(arg);
+        }
 
         using var process = Process.Start(psi)!;
         var output = process.StandardOutput.ReadToEnd();
