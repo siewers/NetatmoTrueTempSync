@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Product>NetatmoTrueTempSync</Product>
+    <Product>Netatmo True Temp Sync</Product>
     <Authors>Kenneth Siewers Møller</Authors>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
