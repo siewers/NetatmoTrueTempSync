@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using NetatmoThermoSync.Models;
 
@@ -12,7 +13,18 @@ namespace NetatmoThermoSync.Auth;
 public sealed class WebSessionAuth : IDisposable
 {
     private const string AuthBase = "https://auth.netatmo.com";
-    private const string UserAgent = "netatmo-home";
+    private static readonly string UserAgent = $"Mozilla/5.0 ({GetPlatformToken()}) NetatmoThermoSync/1.0";
+
+    private static string GetPlatformToken()
+    {
+        var version = Environment.OSVersion.Version;
+
+        if (OperatingSystem.IsMacOS())
+            return $"Macintosh; Intel Mac OS X {version.Major}_{version.Minor}_{version.Build}";
+        if (OperatingSystem.IsLinux())
+            return $"X11; Linux {RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()}";
+        return "compatible";
+    }
 
     private readonly CookieContainer _cookies = new();
     private readonly NetatmoCredentials _credentials;
