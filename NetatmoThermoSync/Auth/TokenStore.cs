@@ -10,6 +10,13 @@ public static class TokenStore
     private const string WebSessionSecretKey = "websession";
     private static readonly ISecretStore Secrets = CreateSecretStore();
 
+    public static NetatmoCredentials LoadCredentials()
+    {
+        return TryLoadCredentials(out var credentials)
+            ? credentials
+            : throw new MissingCredentialsException();
+    }
+
     public static bool TryLoadCredentials([NotNullWhen(true)] out NetatmoCredentials? credentials)
     {
         if (Secrets.Load(CredentialsSecretKey) is ({ Length: > 0 } email, { Length: > 0 } password))
@@ -48,6 +55,28 @@ public static class TokenStore
 
         var json = JsonSerializer.Serialize(session, AppJsonContext.Default.WebSessionData);
         Secrets.Save(WebSessionSecretKey, credentials.Email, json);
+    }
+
+    public static bool DeleteCredentials()
+    {
+        if (Secrets.Load(CredentialsSecretKey) is null)
+        {
+            return false;
+        }
+
+        Secrets.Delete(CredentialsSecretKey);
+        return true;
+    }
+
+    public static bool DeleteWebSession()
+    {
+        if (Secrets.Load(WebSessionSecretKey) is null)
+        {
+            return false;
+        }
+
+        Secrets.Delete(WebSessionSecretKey);
+        return true;
     }
 
     private static ISecretStore CreateSecretStore()
