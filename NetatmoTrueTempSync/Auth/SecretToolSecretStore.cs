@@ -6,9 +6,9 @@ namespace NetatmoTrueTempSync.Auth;
 
 internal sealed class SecretToolSecretStore : ISecretStore
 {
-    private const string ServiceName = "netatmo-truetempsync";
+    private const string ServiceName = "com.siewers.NetatmoTrueTempSync";
 
-    public (string Account, string Secret)? Load(string key)
+    public SecretEntry? Load(string key)
     {
         var psi = CreateStartInfo("lookup", "service", ServiceName, "key", key);
         using var process = Process.Start(psi)!;
@@ -26,12 +26,12 @@ internal sealed class SecretToolSecretStore : ISecretStore
             return null;
         }
 
-        return (account, secret);
+        return new SecretEntry(account, secret);
     }
 
-    public void Save(string key, string account, string secret)
+    public void Save(string key, SecretEntry entry)
     {
-        var dict = new Dictionary<string, string> { ["account"] = account, ["secret"] = secret };
+        var dict = new Dictionary<string, string> { ["account"] = entry.Account, ["secret"] = entry.Secret };
         var json = JsonSerializer.Serialize(dict, AppJsonContext.Default.DictionaryStringString);
 
         var psi = CreateStartInfo("store", "--label", $"NetatmoTrueTempSync: {key}", "service", ServiceName, "key", key);

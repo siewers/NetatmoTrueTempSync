@@ -9,7 +9,7 @@ internal sealed class FileSecretStore : ISecretStore
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".config", "netatmo-truetempsync", "secrets");
 
-    public (string Account, string Secret)? Load(string key)
+    public SecretEntry? Load(string key)
     {
         var path = Path.Combine(SecretsDir, key);
         if (!File.Exists(path))
@@ -24,13 +24,13 @@ internal sealed class FileSecretStore : ISecretStore
             return null;
         }
 
-        return (account, secret);
+        return new SecretEntry(account, secret);
     }
 
-    public void Save(string key, string account, string secret)
+    public void Save(string key, SecretEntry entry)
     {
         Directory.CreateDirectory(SecretsDir);
-        var dict = new Dictionary<string, string> { ["account"] = account, ["secret"] = secret };
+        var dict = new Dictionary<string, string> { ["account"] = entry.Account, ["secret"] = entry.Secret };
         var json = JsonSerializer.Serialize(dict, AppJsonContext.Default.DictionaryStringString);
         var path = Path.Combine(SecretsDir, key);
         File.WriteAllText(path, json);

@@ -5,41 +5,35 @@ namespace NetatmoTrueTempSync.Auth;
 
 internal sealed class KeychainSecretStore : ISecretStore
 {
-    private const string ServicePrefix = "netatmo-truetempsync/";
+    private const string ServicePrefix = "com.siewers.NetatmoTrueTempSync/";
 
-    public (string Account, string Secret)? Load(string key)
+    public SecretEntry? Load(string key)
     {
         var service = ServicePrefix + key;
 
-        // Get attributes output to parse account name
-        var (exitCode, output) = RunSecurity("find-generic-password", "-s", service);
+        // -g prints password to stderr, attributes to stdout
+        var (exitCode, stdout, stderr) = RunSecurity("find-generic-password", "-g", "-s", service);
         if (exitCode != 0)
         {
             return null;
         }
 
-        var account = ParseAccount(output);
-        if (account is null)
+        var account = ParseAccount(stdout);
+        var password = ParsePassword(stderr);
+        if (account is null || password is null)
         {
             return null;
         }
 
-        // Get password separately
-        var (pwExitCode, password) = RunSecurity("find-generic-password", "-s", service, "-w");
-        if (pwExitCode != 0)
-        {
-            return null;
-        }
-
-        return (account, DecodePassword(password.TrimEnd('\n')));
+        return new SecretEntry(account, password);
     }
 
-    public void Save(string key, string account, string secret)
+    public void Save(string key, SecretEntry entry)
     {
         var service = ServicePrefix + key;
         // Delete existing entry first to handle account name changes
         RunSecurity("delete-generic-password", "-s", service);
-        RunSecurity("add-generic-password", "-s", service, "-a", account, "-w", secret);
+        RunSecurity("add-generic-password", "-s", service, "-a", entry.Account, "-w", entry.Secret);
     }
 
     public void Delete(string key)
@@ -73,33 +67,42 @@ internal sealed class KeychainSecretStore : ISecretStore
         return null;
     }
 
-    private static string DecodePassword(string value)
+    private static string? ParsePassword(string stderr)
     {
-        // macOS Keychain hex-encodes the password when it contains non-ASCII characters.
-        // Detect hex output (even length, all hex chars) and decode it.
-        if (value.Length % 2 == 0 && value.Length > 0 && IsHex(value))
+        foreach (var line in stderr.Split('\n'))
         {
-            var bytes = Convert.FromHexString(value);
-            return Encoding.UTF8.GetString(bytes);
-        }
-
-        return value;
-    }
-
-    private static bool IsHex(string value)
-    {
-        foreach (var c in value)
-        {
-            if (!char.IsAsciiHexDigit(c))
+            var trimmed = line.AsSpan().Trim();
+            if (!trimmed.StartsWith("password:"))
             {
-                return false;
+                continue;
+            }
+
+            var value = trimmed["password:".Length..].Trim();
+
+            // Plain text: password: "thepassword"
+            if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+            {
+                return value[1..^1].ToString();
+            }
+
+            // Hex-encoded (non-ASCII): password: 0x<hex>  "escaped representation"
+            if (value.StartsWith("0x"))
+            {
+                var hex = value[2..];
+                var spaceIndex = hex.IndexOf(' ');
+                if (spaceIndex >= 0)
+                {
+                    hex = hex[..spaceIndex];
+                }
+
+                return Encoding.UTF8.GetString(Convert.FromHexString(hex.ToString()));
             }
         }
 
-        return true;
+        return null;
     }
 
-    private static (int ExitCode, string Output) RunSecurity(params string[] args)
+    private static (int ExitCode, string Stdout, string Stderr) RunSecurity(params string[] args)
     {
         var psi = new ProcessStartInfo("security")
         {
@@ -113,8 +116,9 @@ internal sealed class KeychainSecretStore : ISecretStore
         }
 
         using var process = Process.Start(psi)!;
-        var output = process.StandardOutput.ReadToEnd();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        return (process.ExitCode, output);
+        return (process.ExitCode, stdout, stderr);
     }
 }

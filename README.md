@@ -56,6 +56,15 @@ NetatmoTrueTempSync sync --home "My Home"
 
 # Dump raw API data for debugging
 NetatmoTrueTempSync dump
+
+# Install as a background service (runs sync every 10 minutes)
+NetatmoTrueTempSync service install
+
+# Check service status
+NetatmoTrueTempSync service status
+
+# Remove the background service
+NetatmoTrueTempSync service uninstall
 ```
 
 ## Sensor mapping
@@ -73,35 +82,28 @@ By default, rooms are matched to indoor sensors by name. If your room and sensor
 
 Keys are room names, values are sensor module names.
 
-## Running as a service (macOS)
+## Running as a background service
 
-Create a launchd plist at `~/Library/LaunchAgents/io.github.siewers.netatmotruetempsync.plist`:
+The `service` commands set up the app to run `sync` automatically every 10 minutes using the platform's native service manager:
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>io.github.siewers.netatmotruetempsync</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/Users/YOU/.local/bin/NetatmoTrueTempSync</string>
-        <string>sync</string>
-    </array>
-    <key>StartInterval</key>
-    <integer>600</integer>
-    <key>StandardOutPath</key>
-    <string>/tmp/netatmo-truetempsync.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/netatmo-truetempsync.err</string>
-</dict>
-</plist>
-```
+- **macOS**: launchd plist in `~/Library/LaunchAgents/`
+- **Linux**: systemd user timer in `~/.config/systemd/user/`
 
 ```sh
-launchctl load ~/Library/LaunchAgents/io.github.siewers.netatmotruetempsync.plist
+# Publish the app first
+dotnet publish -c Release
+
+# Install and start the service
+./NetatmoTrueTempSync service install
+
+# Check if the service is installed and running
+./NetatmoTrueTempSync service status
+
+# Stop and remove the service
+./NetatmoTrueTempSync service uninstall
 ```
+
+The service uses the path of the currently running binary, so make sure you run `service install` from the published executable (not via `dotnet run`).
 
 ## License
 

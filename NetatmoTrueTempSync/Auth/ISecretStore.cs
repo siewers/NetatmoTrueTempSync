@@ -2,9 +2,9 @@ namespace NetatmoTrueTempSync.Auth;
 
 public interface ISecretStore
 {
-    (string Account, string Secret)? Load(string key);
+    SecretEntry? Load(string key);
 
-    void Save(string key, string account, string secret);
+    void Save(string key, SecretEntry entry);
 
     void Delete(string key);
 }

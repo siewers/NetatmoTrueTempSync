@@ -19,9 +19,10 @@ public static class TokenStore
 
     public static bool TryLoadCredentials([NotNullWhen(true)] out NetatmoCredentials? credentials)
     {
-        if (Secrets.Load(CredentialsSecretKey) is ({ Length: > 0 } email, { Length: > 0 } password))
+        var entry = Secrets.Load(CredentialsSecretKey);
+        if (entry is { Account.Length: > 0, Secret.Length: > 0 })
         {
-            credentials = new NetatmoCredentials(email, password);
+            credentials = new NetatmoCredentials(entry.Account, entry.Secret);
             return true;
         }
 
@@ -31,18 +32,18 @@ public static class TokenStore
 
     public static void SaveCredentials(string email, string password)
     {
-        Secrets.Save(CredentialsSecretKey, email, password);
+        Secrets.Save(CredentialsSecretKey, new SecretEntry(email, password));
     }
 
     public static WebSessionData? LoadWebSession()
     {
-        var result = Secrets.Load(WebSessionSecretKey);
-        if (result is null)
+        var entry = Secrets.Load(WebSessionSecretKey);
+        if (entry is null)
         {
             return null;
         }
 
-        var session = JsonSerializer.Deserialize(result.Value.Secret, AppJsonContext.Default.WebSessionData);
+        var session = JsonSerializer.Deserialize(entry.Secret, AppJsonContext.Default.WebSessionData);
         return session is { AccessToken.Length: > 0 } ? session : null;
     }
 
@@ -54,7 +55,7 @@ public static class TokenStore
         }
 
         var json = JsonSerializer.Serialize(session, AppJsonContext.Default.WebSessionData);
-        Secrets.Save(WebSessionSecretKey, credentials.Email, json);
+        Secrets.Save(WebSessionSecretKey, new SecretEntry(credentials.Email, json));
     }
 
     public static bool DeleteCredentials()

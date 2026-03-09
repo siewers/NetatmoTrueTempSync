@@ -10,7 +10,7 @@ public static class DumpCommand
 {
     internal static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        await StatusCommand.LoadConfigOrFail(cancellationToken);
+        await ConfigStore.LoadAsync(cancellationToken);
         using var client = new NetatmoClient(TokenStore.LoadCredentials());
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);

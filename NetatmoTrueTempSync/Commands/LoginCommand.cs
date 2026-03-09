@@ -16,14 +16,16 @@ public static class LoginCommand
 
         TokenStore.TryLoadCredentials(out var existingCredentials);
 
-        var emailPrompt = new TextPrompt<string>("Email:");
-        if (!string.IsNullOrEmpty(existingCredentials?.Email))
-        {
-            emailPrompt.DefaultValue(existingCredentials.Email);
-        }
+        var email = AnsiConsole.Prompt(
+            new TextPrompt<string>("Email:")
+               .DefaultValue(existingCredentials?.Email ?? string.Empty)
+        );
 
-        var email = AnsiConsole.Prompt(emailPrompt);
-        var password = AnsiConsole.Prompt(new TextPrompt<string>("Password:").Secret());
+        var password = AnsiConsole.Prompt(
+            new TextPrompt<string>("Password:")
+               .Secret()
+               .DefaultValue(existingCredentials?.Password ?? string.Empty)
+        );
 
         TokenStore.SaveCredentials(email, password);
 
@@ -31,7 +33,9 @@ public static class LoginCommand
         try
         {
             using var webAuth = new WebSessionAuth(new NetatmoCredentials(email, password));
-            await webAuth.LoginAsync(cancellationToken);
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .StartAsync("Signing in...", async _ => await webAuth.LoginAsync(cancellationToken));
             AnsiConsole.MarkupLine("[bold green]Login successful! Session saved.[/]");
             return 0;
         }

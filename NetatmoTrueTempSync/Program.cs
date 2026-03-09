@@ -21,6 +21,15 @@ var rootCommand = new RootCommand("Netatmo TrueTempSync — sync weather station
     }.WithAction(SyncCommand.ExecuteAsync),
     new Command("dump", "Dump raw API data for debugging device/room associations.")
        .WithAction(DumpCommand.ExecuteAsync),
+    new Command("service", "Manage the background sync service.")
+    {
+        new Command("install", "Install and start the background sync service.")
+           .WithAction(ServiceCommand.InstallAsync),
+        new Command("uninstall", "Stop and remove the background sync service.")
+           .WithAction(ServiceCommand.UninstallAsync),
+        new Command("status", "Check if the background sync service is installed and running.")
+           .WithAction(ServiceCommand.StatusAsync),
+    },
 };
 
 var config = new InvocationConfiguration { EnableDefaultExceptionHandler = false };
@@ -32,5 +41,10 @@ try
 catch (MissingCredentialsException ex)
 {
     AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(ex.Message)} Run [bold]auth login[/] first.");
+    return 1;
+}
+catch (NetatmoException ex)
+{
+    AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(ex.Message)}");
     return 1;
 }

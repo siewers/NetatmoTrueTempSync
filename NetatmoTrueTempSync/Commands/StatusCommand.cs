@@ -1,7 +1,6 @@
 using System.CommandLine;
 using NetatmoTrueTempSync.Api;
 using NetatmoTrueTempSync.Auth;
-using NetatmoTrueTempSync.Models;
 using Spectre.Console;
 
 namespace NetatmoTrueTempSync.Commands;
@@ -10,6 +9,7 @@ public static class StatusCommand
 {
     internal static async Task<int> ExecuteAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
+        var config = await ConfigStore.LoadAsync(cancellationToken);
         using var client = new NetatmoClient(TokenStore.LoadCredentials());
 
         var homesData = await client.GetHomesDataAsync(cancellationToken);
@@ -103,21 +103,35 @@ public static class StatusCommand
 
                     var battery = $"[{batteryColor}]{ms?.BatteryState ?? "-"}[/]";
 
-                    var reachable = ms?.Reachable == true ? "" : " [red](offline)[/]";
+                    var reachable = ms is { Reachable: false }
+                        ? " [red](offline)[/]"
+                        : "";
                     return (Device: $"{typeLabel} {Markup.Escape(m.Name)}{reachable}", Battery: battery);
                 }).ToList();
 
-                // Match indoor sensor to this room by name
-                var sensor = indoorReadings.FirstOrDefault(r =>
-                    room.Name.Contains(r.Name, StringComparison.OrdinalIgnoreCase) ||
-                    r.Name.Contains(room.Name, StringComparison.OrdinalIgnoreCase));
+                // Match indoor sensor: check sensor_map first, then fall back to name matching
+                (string Name, double Temp) sensor = default;
+                if (config.SensorMap is not null &&
+                    config.SensorMap.TryGetValue(room.Name, out var mappedSensor))
+                {
+                    sensor = indoorReadings.FirstOrDefault(r =>
+                        r.Name.Equals(mappedSensor, StringComparison.OrdinalIgnoreCase));
+                }
 
-                var sensorLabel = sensor != default
-                    ? $"[blue]{sensor.Temp:F1}°C[/] [dim]({Markup.Escape(sensor.Name)})[/]"
+                if (sensor == default)
+                {
+                    sensor = indoorReadings.FirstOrDefault(r =>
+                        room.Name.Contains(r.Name, StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains(room.Name, StringComparison.OrdinalIgnoreCase));
+                }
+
+                var hasSensor = sensor.Name is not null;
+                var sensorLabel = hasSensor
+                    ? $"[blue]{sensor.Temp:F1}°C[/] [dim]({Markup.Escape(sensor.Name!)})[/]"
                     : "[dim]—[/]";
 
                 var deltaLabel = "[dim]—[/]";
-                if (sensor != default && rs.MeasuredTemperature.HasValue)
+                if (hasSensor && rs.MeasuredTemperature.HasValue)
                 {
                     var delta = sensor.Temp - rs.MeasuredTemperature.Value;
                     var deltaColor = Math.Abs(delta) > 1.0 ? "red" : Math.Abs(delta) > 0.5 ? "yellow" : "green";
@@ -162,8 +176,4 @@ public static class StatusCommand
         return 0;
     }
 
-    internal static async Task<AppConfig> LoadConfigOrFail(CancellationToken cancellationToken)
-    {
-        return await ConfigStore.Load(cancellationToken) ?? throw new NetatmoException("Not configured. Run 'auth login' first.");
-    }
 }

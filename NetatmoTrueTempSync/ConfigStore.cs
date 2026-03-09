@@ -11,15 +11,15 @@ public static class ConfigStore
 
     private static string ConfigPath => Path.Combine(ConfigDir, "config.json");
 
-    public static async Task<AppConfig?> Load(CancellationToken cancellationToken = default)
+    public static async Task<AppConfig> LoadAsync(CancellationToken cancellationToken = default)
     {
         if (!File.Exists(ConfigPath))
         {
-            return null;
+            return new AppConfig();
         }
 
         var json = await File.ReadAllTextAsync(ConfigPath, cancellationToken);
-        return JsonSerializer.Deserialize(json, AppJsonContext.Default.AppConfig);
+        return JsonSerializer.Deserialize(json, AppJsonContext.Default.AppConfig) ?? new AppConfig();
     }
 
     public static async Task Save(AppConfig config, CancellationToken cancellationToken)
