@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <TrimmerRootAssembly Include="NetatmoTrueTempSync" />
+    <TrimmerRootAssembly Include="$(AssemblyName)" />
     <TrimmerRootAssembly Include="Spectre.Console" />
   </ItemGroup>
 

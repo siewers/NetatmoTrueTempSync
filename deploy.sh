@@ -37,7 +37,7 @@ proc run_scp {user host pass src dst} {
 
 send_user "Deploying to $user@$host:$install_dir...\n"
 run_ssh $user $host $pass "sudo mkdir -p $install_dir && sudo chown $user:$user $install_dir"
-run_scp $user $host $pass "$publish_dir/NetatmoTrueTempSync" "$install_dir/"
-run_ssh $user $host $pass "$install_dir/NetatmoTrueTempSync service install"
+run_scp $user $host $pass "$publish_dir/netatmo-truetempsync" "$install_dir/"
+run_ssh $user $host $pass "$install_dir/netatmo-truetempsync service install"
 
 send_user "Done!\n"

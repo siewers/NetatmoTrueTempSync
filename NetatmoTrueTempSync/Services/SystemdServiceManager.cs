@@ -4,7 +4,7 @@ namespace NetatmoTrueTempSync.Services;
 
 internal sealed class SystemdServiceManager : IServiceManager
 {
-    private const string UnitName = "com.siewers.NetatmoTrueTempSync";
+    private const string UnitName = "netatmo-truetempsync";
 
     private static readonly string UnitDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
