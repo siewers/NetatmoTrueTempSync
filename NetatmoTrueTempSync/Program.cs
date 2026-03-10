@@ -21,6 +21,10 @@ var rootCommand = new RootCommand("Netatmo TrueTempSync — sync weather station
     }.WithAction(SyncCommand.ExecuteAsync),
     new Command("dump", "Dump raw API data for debugging device/room associations.")
        .WithAction(DumpCommand.ExecuteAsync),
+    new Command("update", "Check for and install the latest release from GitHub.")
+    {
+        UpdateCommand.CheckOption,
+    }.WithAction(UpdateCommand.ExecuteAsync),
     new Command("service", "Manage the background sync service.")
     {
         new Command("install", "Install and start the background sync service.")
