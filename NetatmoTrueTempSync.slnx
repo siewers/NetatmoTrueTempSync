@@ -1,4 +1,7 @@
 <Solution>
   <Project Path="NetatmoTrueTempSync.Tests/NetatmoTrueTempSync.Tests.csproj" />
   <Project Path="NetatmoTrueTempSync/NetatmoTrueTempSync.csproj" />
+  <Folder Name="/.github/workflows/">
+    <File Path=".github/workflows/build.yml" />
+  </Folder>
 </Solution>
