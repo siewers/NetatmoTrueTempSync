@@ -3,6 +3,7 @@ using System.Globalization;
 using NetatmoTrueTempSync.Api;
 using NetatmoTrueTempSync.Auth;
 using NetatmoTrueTempSync.Models;
+using NetatmoTrueTempSync.Services;
 using Spectre.Console;
 
 namespace NetatmoTrueTempSync.Commands;
@@ -47,18 +48,13 @@ public static class SyncCommand
         var homesData = await client.GetHomesDataAsync(cancellationToken);
         var homes = homesData.Body?.Homes ?? [];
 
-        var home = !string.IsNullOrEmpty(homeName)
-            ? homes.FirstOrDefault(h =>
-                  h.Name.Equals(homeName, StringComparison.OrdinalIgnoreCase) ||
-                  h.Id == homeName) ??
-              throw new NetatmoException($"Home '{homeName}' not found.")
-            : homes.FirstOrDefault() ?? throw new NetatmoException("No homes found.");
+        var home = SyncService.FindHome(homes, homeName);
 
         var status = await client.GetHomeStatusAsync(home.Id, cancellationToken);
         var roomStatuses = status.Body?.Home?.Rooms ?? [];
 
         // Get weather station indoor module readings
-        var indoorReadings = await GetIndoorReadingsAsync(client, cancellationToken);
+        var indoorReadings = await GetIndoorReadingsAsync(client, cancellationToken) ?? [];
 
         var timestamp = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"[{timestamp}]")}[/] Syncing [bold]{Markup.Escape(home.Name)}[/]...");
@@ -85,18 +81,7 @@ public static class SyncCommand
                 continue;
             }
 
-            // Check sensor_map config first, then fall back to name matching
-            IndoorReading? sensor = null;
-            if (config.SensorMap is not null &&
-                config.SensorMap.TryGetValue(room.Name, out var mappedSensor))
-            {
-                sensor = indoorReadings.FirstOrDefault(r =>
-                    r.Name.Equals(mappedSensor, StringComparison.OrdinalIgnoreCase));
-            }
-
-            sensor ??= indoorReadings.FirstOrDefault(r =>
-                room.Name.Contains(r.Name, StringComparison.OrdinalIgnoreCase) ||
-                r.Name.Contains(room.Name, StringComparison.OrdinalIgnoreCase));
+            var sensor = SyncService.FindSensorForRoom(room.Name, indoorReadings, config);
 
             if (sensor is null)
             {
@@ -113,7 +98,7 @@ public static class SyncCommand
             var delta = sensor.Temperature - valveTemp;
             var valveNames = string.Join(", ", valves.Select(v => Markup.Escape(v.Name)));
 
-            if (Math.Abs(delta) < 0.05)
+            if (!SyncService.ShouldSync(sensor.Temperature, valveTemp))
             {
                 AnsiConsole.MarkupLine(
                     $"  [bold]{Markup.Escape(room.Name)}[/] — sensor [blue]{Markup.Escape(sensor.Name)}[/] [cyan]{sensor.Temperature:F1}°C[/], valve [yellow]{valveTemp:F1}°C[/] [dim](no correction needed)[/]");
@@ -140,44 +125,17 @@ public static class SyncCommand
         AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"[{timestamp}]")}[/] Sync complete — {syncCount} room(s) updated.");
     }
 
-    private static async Task<List<IndoorReading>> GetIndoorReadingsAsync(NetatmoClient client, CancellationToken cancellationToken)
+    private static async Task<List<SyncService.IndoorReading>?> GetIndoorReadingsAsync(NetatmoClient client, CancellationToken cancellationToken)
     {
-        var readings = new List<IndoorReading>();
-
         try
         {
             var stationsData = await client.GetStationsDataAsync(cancellationToken);
-            var devices = stationsData.Body?.Devices ?? [];
-
-            foreach (var station in devices)
-            {
-                // The base station (NAMain) is itself an indoor module
-                if (station is { Type: "NAMain", DashboardData.Temperature: not null })
-                {
-                    readings.Add(new IndoorReading(
-                        station.ModuleName,
-                        station.DashboardData.Temperature.Value));
-                }
-
-                // Additional indoor modules (NAModule4)
-                foreach (var module in station.Modules.Where(m => m is { Type: "NAModule4", Reachable: true }))
-                {
-                    if (module.DashboardData?.Temperature is not null)
-                    {
-                        readings.Add(new IndoorReading(
-                            module.ModuleName,
-                            module.DashboardData.Temperature.Value));
-                    }
-                }
-            }
+            return SyncService.ExtractIndoorReadings(stationsData.Body?.Devices ?? []);
         }
         catch (Exception ex)
         {
             AnsiConsole.MarkupLine($"[yellow]  Warning: Could not read weather station data: {Markup.Escape(ex.Message)}[/]");
+            return null;
         }
-
-        return readings;
     }
-
-    private sealed record IndoorReading(string Name, double Temperature);
 }
