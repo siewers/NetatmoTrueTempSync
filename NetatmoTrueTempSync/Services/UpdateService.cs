@@ -14,8 +14,8 @@ public static class UpdateService
 
     public static string? GetCurrentVersion()
     {
-        return Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
+        var version = Assembly.GetEntryAssembly()?.GetName().Version;
+        return version is not null ? $"v{version.ToString(3)}" : null;
     }
 
     public static async Task<(string? TagName, string? AssetUrl)?> CheckForUpdateAsync(HttpClient client, CancellationToken cancellationToken)
