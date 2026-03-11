@@ -106,6 +106,14 @@ public static class SyncCommand
                 continue;
             }
 
+            if (!SyncService.IsDeltaSafe(sensor.Temperature, valveTemp))
+            {
+                AnsiConsole.MarkupLine(
+                    $"  [bold]{Markup.Escape(room.Name)}[/] — sensor [blue]{Markup.Escape(sensor.Name)}[/] [cyan]{sensor.Temperature:F1}°C[/], valve [yellow]{valveTemp:F1}°C[/] (delta {delta:+0.0;-0.0}°C) [red]skipped — delta too large[/]");
+
+                continue;
+            }
+
             AnsiConsole.MarkupLine(
                 $"  [bold]{Markup.Escape(room.Name)}[/] — sensor [blue]{Markup.Escape(sensor.Name)}[/] [cyan]{sensor.Temperature:F1}°C[/], valve [yellow]{valveTemp:F1}°C[/] (delta {delta:+0.0;-0.0}°C) → [green]{valveNames}[/]");
 

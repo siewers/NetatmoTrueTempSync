@@ -5,6 +5,7 @@ namespace NetatmoTrueTempSync.Services;
 public static class SyncService
 {
     private const double SyncThreshold = 0.05;
+    private const double MaxDelta = 1.0;
 
     public static List<IndoorReading> ExtractIndoorReadings(IEnumerable<WeatherStation> stations)
     {
@@ -48,6 +49,9 @@ public static class SyncService
 
     public static bool ShouldSync(double sensorTemp, double valveTemp) =>
         Math.Abs(sensorTemp - valveTemp) >= SyncThreshold;
+
+    public static bool IsDeltaSafe(double sensorTemp, double valveTemp) =>
+        Math.Abs(sensorTemp - valveTemp) <= MaxDelta;
 
     public static Home FindHome(List<Home> homes, string? homeName)
     {

@@ -249,6 +249,20 @@ public class SyncServiceTests
         await Assert.That(SyncService.ShouldSync(sensorTemp, valveTemp)).IsEqualTo(expected);
     }
 
+    // --- IsDeltaSafe ---
+
+    [Test]
+    [Arguments(21.0, 21.5, true)]
+    [Arguments(21.0, 22.0, true)]
+    [Arguments(21.0, 20.0, true)]
+    [Arguments(21.0, 22.1, false)]
+    [Arguments(21.0, 19.9, false)]
+    [Arguments(18.0, 22.0, false)]
+    public async Task IsDeltaSafe_respects_max_delta(double sensorTemp, double valveTemp, bool expected)
+    {
+        await Assert.That(SyncService.IsDeltaSafe(sensorTemp, valveTemp)).IsEqualTo(expected);
+    }
+
     // --- FindHome ---
 
     private static readonly List<Home> TestHomes =
