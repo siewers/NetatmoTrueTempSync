@@ -5,7 +5,8 @@ namespace NetatmoTrueTempSync.Services;
 public sealed class SyncLogger(TextWriter writer) : IAsyncDisposable
 {
     private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
-    private const string Header = "Timestamp,Room,Sensor,SensorTemp,ValveTemp,Delta,Action";
+    private const string Header = "Timestamp,CycleId,Room,Sensor,SensorTemp,ValveTemp,Delta,Action";
+    private readonly string _cycleId = Guid.NewGuid().ToString()[..8];
 
     public async Task LogAsync(string room, string sensor, double sensorTemp, double valveTemp, SyncAction action)
     {
@@ -13,7 +14,7 @@ public sealed class SyncLogger(TextWriter writer) : IAsyncDisposable
         var timestamp = DateTime.Now.ToString("O", CultureInfo.InvariantCulture);
 
         await writer.WriteLineAsync(
-            $"{timestamp},{Escape(room)},{Escape(sensor)},{sensorTemp:F1},{valveTemp:F1},{delta:+0.0;-0.0},{action.ToLogString()}");
+            $"{timestamp},{_cycleId},{Escape(room)},{Escape(sensor)},{sensorTemp:F1},{valveTemp:F1},{delta:+0.0;-0.0},{action.ToLogString()}");
 
         await writer.FlushAsync();
     }

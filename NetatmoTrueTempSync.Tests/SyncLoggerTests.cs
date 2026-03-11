@@ -59,6 +59,23 @@ public class SyncLoggerTests
     }
 
     [Test]
+    public async Task Log_uses_same_cycle_id_for_all_entries()
+    {
+        await using var writer = new StringWriter();
+        await using var logger = new SyncLogger(writer);
+
+        await logger.LogAsync("Room1", "S1", 21.0, 20.0, SyncAction.Synced);
+        await logger.LogAsync("Room2", "S2", 22.0, 21.0, SyncAction.Synced);
+
+        var lines = writer.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        var cycleId1 = lines[0].Split(',')[1];
+        var cycleId2 = lines[1].Split(',')[1];
+
+        await Assert.That(cycleId1).IsEqualTo(cycleId2);
+        await Assert.That(cycleId1).Length().IsEqualTo(8);
+    }
+
+    [Test]
     public async Task Log_formats_negative_delta()
     {
         await using var writer = new StringWriter();
@@ -83,7 +100,7 @@ public class SyncLoggerTests
 
             var lines = await File.ReadAllLinesAsync(path);
 
-            await Assert.That(lines[0]).IsEqualTo("Timestamp,Room,Sensor,SensorTemp,ValveTemp,Delta,Action");
+            await Assert.That(lines[0]).IsEqualTo("Timestamp,CycleId,Room,Sensor,SensorTemp,ValveTemp,Delta,Action");
             await Assert.That(lines).Count().IsEqualTo(2);
         }
         finally
